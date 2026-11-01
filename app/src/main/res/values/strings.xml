@@ -1,0 +1,47 @@
+<resources>
+    <string name="app_name">LDAC Lock</string>
+
+    <string name="audio">Audio device</string>
+    <string name="headphones">Headphones</string>
+    <string name="headset">Headset</string>
+    <string name="speaker">Speaker</string>
+
+    <string name="current_codec">Current Codec</string>
+    <string name="hi_res">Hi-Res</string>
+    <string name="locked_state">Locked · %1$s quality</string>
+    <string name="not_locked_state">Not locked · %1$s quality</string>
+    <string name="locked_unreadable">Locked · quality not readable on this device</string>
+
+    <string name="lock_title">Lock</string>
+    <string name="lock_summary_hop">AAC → LDAC %1$s · 24-bit · HIGH</string>
+    <string name="lock_summary_direct">LDAC %1$s · 24-bit · HIGH</string>
+    <string name="lock_now">Lock now</string>
+    <string name="last_lock">Last lock %1$s · took %2$s</string>
+    <string name="last_failed">Last lock %1$s failed · %2$s</string>
+
+    <string name="pair">Pair headphone</string>
+    <string name="locking">Locking…</string>
+    <string name="locked">Locked</string>
+    <string name="not_locked">Not locked</string>
+    <string name="kbps">%1$d kbps</string>
+    <string name="failed">Failed</string>
+    <string name="bluetooth_off">Bluetooth off</string>
+    <string name="bluetooth_timeout">Bluetooth didn\'t respond</string>
+    <string name="pause_first">Pause playback first</string>
+
+    <!-- Tile names on nubia/RedMagic, whose round tiles hide the subtitle: two short lines at most. -->
+    <string name="tile_locked">LDAC Locked</string>
+    <string name="tile_pause">Pause first</string>
+
+    <!-- The Sonos app's words, as in UPnP Cast. -->
+    <string name="settings">Settings</string>
+    <string name="appearance">Appearance</string>
+    <string name="system_default">System default</string>
+    <string name="light_mode">Light mode</string>
+    <string name="dark_mode">Dark mode</string>
+
+    <string name="copyright" translatable="false">LDAC Lock %1$s · Copyright © 2026 Stouthart</string>
+    <string name="no_device">No headphone connected</string>
+    <string name="not_paired">Pair the headphone first</string>
+    <string name="no_bluetooth">Allow Nearby devices</string>
+</resources>
