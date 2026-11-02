@@ -117,7 +117,7 @@ class LockService : Service(), BluetoothProfile.ServiceListener {
                 Last.notice(this, getString(R.string.pause_first))
                 return
             }
-            val plan = plan(status, path)
+            val plan = plan(status, path, Rate.target(this, path))
             val steps = Hop(this, a2dp, device, plan.steps, resend = !hardware).run()
             val t1 = SystemClock.elapsedRealtimeNanos()
             val e = if (hardware) null else ldacEncoder() // The DSP's encoder isn't in the dump.

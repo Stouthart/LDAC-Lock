@@ -9,6 +9,9 @@
         <item name="android:textColorSecondary">@color/text2</item>
         <item name="android:windowLightStatusBar">@bool/light_bars</item>
         <item name="android:windowLightNavigationBar">@bool/light_bars</item>
+        <!-- Android 14 only: from 15 the screen runs behind the bars, and Android ignores these. -->
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/bg</item>
     </style>
 
     <style name="Card">

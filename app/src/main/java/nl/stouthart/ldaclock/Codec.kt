@@ -103,18 +103,29 @@ private fun skipTo(r: BufferedReader, line: String): Boolean {
 /** The steps and the LDAC rate they end on. */
 class Plan(val steps: List<BluetoothCodecConfig>, val hz: Int)
 
+private fun rateBit(hz: Int) = when (hz) {
+    48000 -> SAMPLE_RATE_48000
+    88200 -> SAMPLE_RATE_88200
+    96000 -> SAMPLE_RATE_96000
+    else -> SAMPLE_RATE_44100
+}
+
 /**
- * Builds the steps from the phone's path and what the headphone can select.
- * Software or unknown: AAC → 32-bit → 24-bit at 44.1 kHz. Hardware: one LDAC change, at the mixer's rate.
+ * Builds the steps to LDAC at [want] Hz from the phone's path and what the headphone can select.
+ * Software or unknown: AAC → 32-bit → 24-bit. Hardware: one LDAC change.
  */
-fun plan(s: BluetoothCodecStatus?, path: Path?): Plan {
+fun plan(s: BluetoothCodecStatus?, path: Path?, want: Int): Plan {
     val caps = s?.codecsSelectableCapabilities.orEmpty()
     val ldac = caps.firstOrNull { it.isLdac }
-    val want = if (path?.hz == 48000) SAMPLE_RATE_48000 else SAMPLE_RATE_44100
-    // Fall back to the other of 44.1/48 kHz only if the headphone doesn't offer the wanted one.
-    val rate = if (ldac == null || (ldac.sampleRate and want) != 0) want
-    else if (want == SAMPLE_RATE_44100) SAMPLE_RATE_48000 else SAMPLE_RATE_44100
-    val hz = if (rate == SAMPLE_RATE_44100) 44100 else 48000
+    // A rate the headphone doesn't offer falls back within its family first (88.2 → 44.1, 96 → 48), then to the other.
+    val order = when (want) {
+        96000 -> intArrayOf(96000, 48000, 44100)
+        88200 -> intArrayOf(88200, 44100, 48000)
+        48000 -> intArrayOf(48000, 44100)
+        else -> intArrayOf(44100, 48000)
+    }
+    val hz = if (ldac == null) want else order.firstOrNull { (ldac.sampleRate and rateBit(it)) != 0 } ?: want
+    val rate = rateBit(hz)
     if (path?.hardware == true) return Plan(listOf(config(SOURCE_CODEC_TYPE_LDAC, rate, BITS_PER_SAMPLE_24, QUALITY_990)), hz)
     // A different codec forces a fresh stream; SBC is the fallback every headphone has.
     val via = if (caps.any { it.codecType == SOURCE_CODEC_TYPE_AAC }) SOURCE_CODEC_TYPE_AAC else SOURCE_CODEC_TYPE_SBC

@@ -1,12 +1,12 @@
-<!-- 1.0 - Copyright (C) 2026 Stouthart. All rights reserved. -->
+<!-- 1.1 - Copyright (C) 2026 Stouthart. All rights reserved. -->
 
 # Lock Bluetooth LDAC at its highest quality
 
-A small Android app that sets a headphone's **LDAC** connection to its highest quality with one tap, from a Quick Settings tile or the app itself. Android starts every LDAC connection at adaptive quality, which lowers the bitrate whenever the connection gets busy, and on Samsung phones a plain change of the quality setting doesn't even reach the encoder. LDAC Lock makes the change stick, then checks what the encoder actually runs. No internet access, no ads, no account, no background service, and nothing beyond Android itself: the app is 73 KB.
+A small Android app that sets a headphone's **LDAC** connection to its highest quality with one tap, from a Quick Settings tile or the app itself. Android starts every LDAC connection at adaptive quality, which lowers the bitrate whenever the connection gets busy, and on Samsung phones a plain change of the quality setting doesn't even reach the encoder. LDAC Lock makes the change stick, then checks what the encoder actually runs. No internet access, no ads, no account, no background service, and nothing beyond Android itself: the app is 75 KB.
 
 <p align="center"><img src="docs/screenshot-s25.png" width="360" alt="LDAC Lock on a Galaxy S25 Edge, locked at LDAC 44.1 kHz, 24-bit, 909 kbps"></p>
 
-This is **version 1.0**. The [release notes](RELEASE.md) list what each version changed.
+This is **version 1.1**. The [release notes](RELEASE.md) list what each version changed.
 
 ## What it sets
 
@@ -17,21 +17,23 @@ This is **version 1.0**. The [release notes](RELEASE.md) list what each version 
 
 HIGH is LDAC's top quality, known as 990 kbps: it runs at 990 kbps at 48 and 96 kHz, and at 909 kbps at 44.1 and 88.2 kHz.
 
+These are the defaults. **Sample rate** in the Lock section sets 44.1, 48, 88.2 or 96 kHz instead, for the app and the tile alike; a rate the headphone doesn't offer falls back to 44.1 or 48 kHz. Mind the mixer: on Samsung it follows the codec, so above 44.1 kHz the phone resamples 44.1 kHz music; RedMagic's stays at 48 kHz, so any other rate adds a resample in the audio chip.
+
 ## Requirements
 
-- **Android 16** or newer
+- **Android 14** or newer
 - A headphone with **LDAC**
 - **adb** on a computer, to grant one permission (recommended, see [Installation](#installation))
 - To build it yourself: **JDK 21** and the **Android SDK** command-line tools with `platforms;android-37.0` and `build-tools;37.0.0`. The project brings its own Gradle.
 
-Developed and tested on a **Samsung Galaxy S25 Edge** (One UI 9, Android 17) and a **RedMagic Astra** (REDMAGIC OS 11, Android 16), with Noble FoKus Prestige Encore and FoKus Amadeus headphones. Other Samsung and RedMagic devices should work alike. On other phones LDAC Lock detects which kind of encoder they have and picks the matching method, but that is untested.
+Developed and tested on a **Samsung Galaxy S25 Edge** (One UI 9, Android 17) and a **RedMagic Astra** (REDMAGIC OS 11, Android 16), with Noble FoKus Prestige Encore and FoKus Amadeus headphones. Other Samsung and RedMagic devices should work alike. On other phones LDAC Lock detects which kind of encoder they have and picks the matching method, but that is untested. So are Android 14 and 15: the method was worked out on Android 16 and 17, and an older Bluetooth stack may behave or report differently.
 
 ## Installation
 
-Download `LDAC-Lock-1.0.apk` from the [latest release] and open it on the phone; Android asks to allow installing apps from that source first. Or install it from a computer with the phone connected over USB or wireless debugging:
+Download `LDAC-Lock-1.1.apk` from the [latest release] and open it on the phone; Android asks to allow installing apps from that source first. Or install it from a computer with the phone connected over USB or wireless debugging:
 
 ```bash
-adb install LDAC-Lock-1.0.apk
+adb install LDAC-Lock-1.1.apk
 ```
 
 Then grant the one permission an app can't ask for itself:
@@ -66,8 +68,8 @@ Your build is signed with your own debug key, the release APK with mine. Android
 
 Tap the tile, or **Lock now** in the app. LDAC Lock works on the headphone Android is playing to; with two connected, the other one is left alone.
 
-- **Samsung (software encoder):** it switches to AAC and back to LDAC, at 44.1 kHz with 32-bit and then 24-bit, each at the top quality. The detour makes the phone reopen the stream, which a plain LDAC change doesn't do on Samsung, and the 32 → 24-bit step makes the stack pass the quality on. Music pauses for about a second and a half. Samsung resets LDAC on every connection, so tap once per connection.
-- **RedMagic (hardware encoder):** one LDAC change to 48 kHz, 24-bit, top quality, and only with playback paused: a change while music plays leaves the audio chip silent, sometimes until the headphone reconnects. While music plays, a tap only shows **Pause first**. The setting stays across reconnects.
+- **Samsung (software encoder):** it switches to AAC and back to LDAC, at 44.1 kHz or the chosen **Sample rate**, with 32-bit and then 24-bit, each at the top quality. The detour makes the phone reopen the stream, which a plain LDAC change doesn't do on Samsung, and the 32 → 24-bit step makes the stack pass the quality on. Music pauses for about a second and a half. Samsung resets LDAC on every connection, so tap once per connection.
+- **RedMagic (hardware encoder):** one LDAC change to 48 kHz or the chosen **Sample rate**, 24-bit, top quality, and only with playback paused: a change while music plays leaves the audio chip silent, sometimes until the headphone reconnects. While music plays, a tap only shows **Pause first**. The setting stays across reconnects.
 
 The screen shows the headphone, the current codec and whether it is locked, and follows the headphone and Bluetooth as they change.
 
@@ -94,7 +96,7 @@ RedMagic's round tiles don't show a second line, so there the tile's name carrie
 | `Locked · quality not readable on this device` | Rate, bit depth and the reported quality match; RedMagic's audio chip doesn't report what it actually runs     |
 | `Not locked`                                   | Another codec, rate or bit depth                                                                                 |
 
-Below **Lock now**, the last lock shows its time and how long it took, or why it failed.
+Above **Lock now**, **Sample rate** sets the rate the next lock aims at; moving it never locks by itself. Below, the last lock shows its time and how long it took, or why it failed.
 
 Under **Settings**, **Appearance** sets the app's look: **System default** follows the phone, **Light mode** and **Dark mode** set it for LDAC Lock alone.
 

@@ -178,11 +178,52 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <View
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:fontFamily="sans-serif-medium"
+                android:text="@string/sample_rate"
+                android:textColor="@color/text"
+                android:textSize="16sp" />
+
+            <!-- As UPnP Cast's Polling interval: a 40dp icon slot, the slider, the value at the end. -->
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:layout_marginTop="16dp"
-                android:background="@color/divider" />
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="-8dp"
+                    android:importantForAccessibility="no"
+                    android:padding="8dp"
+                    android:src="@drawable/ic_bars"
+                    android:tint="@color/text2" />
+
+                <!-- 0..3 for 44.1, 48, 88.2 and 96 kHz. -->
+                <SeekBar
+                    android:id="@+id/rate"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:contentDescription="@string/sample_rate"
+                    android:max="3"
+                    android:progressBackgroundTint="@color/text2"
+                    android:progressTint="@color/accent"
+                    android:thumbTint="@color/accent" />
+
+                <TextView
+                    android:id="@+id/rate_value"
+                    android:layout_width="72dp"
+                    android:layout_height="wrap_content"
+                    android:gravity="end"
+                    android:textColor="@color/text2"
+                    android:textSize="15sp" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/lock"
@@ -208,25 +249,14 @@
             style="@style/Card"
             android:layout_marginTop="16dp">
 
-            <LinearLayout
-                android:layout_width="match_parent"
+            <!-- No bar: it marks a title with a summary line, as on Lock; Settings is a title alone. -->
+            <TextView
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal">
-
-                <View
-                    android:layout_width="4dp"
-                    android:layout_height="match_parent"
-                    android:background="@drawable/bar" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="16dp"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="@string/settings"
-                    android:textColor="@color/text"
-                    android:textSize="20sp" />
-            </LinearLayout>
+                android:fontFamily="sans-serif-medium"
+                android:text="@string/settings"
+                android:textColor="@color/text"
+                android:textSize="20sp" />
 
             <TextView
                 android:layout_width="wrap_content"

@@ -15,6 +15,7 @@
     <string name="lock_title">Lock</string>
     <string name="lock_summary_hop">AAC → LDAC %1$s · 24-bit · HIGH</string>
     <string name="lock_summary_direct">LDAC %1$s · 24-bit · HIGH</string>
+    <string name="sample_rate">Sample rate</string> <!-- BCC's "Sample Rate", in the app's sentence case. -->
     <string name="lock_now">Lock now</string>
     <string name="last_lock">Last lock %1$s · took %2$s</string>
     <string name="last_failed">Last lock %1$s failed · %2$s</string>

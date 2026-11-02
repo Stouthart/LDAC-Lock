@@ -1,8 +1,14 @@
-<!-- 1.0 - Copyright (C) 2026 Stouthart. All rights reserved. -->
+<!-- 1.1 - Copyright (C) 2026 Stouthart. All rights reserved. -->
 
 # Release notes
 
 Highlights per version, newest first.
+
+## 1.1 - November 2026
+
+- **Android 14 and 15** as well, besides 16 and 17. Untested on those versions so far: the method was worked out on 16 and 17, and an older Bluetooth stack may behave or report differently.
+- **Sample rate** in the Lock section: 44.1, 48, 88.2 or 96 kHz, for the app and the tile alike. Until it's moved, the phone's own: 44.1 kHz on Samsung, 48 kHz on RedMagic. Locks at 88.2 kHz checked on both.
+- **New icon:** a gradient in the logo's blues, with a light-blue padlock between the headphones.
 
 ## 1.0 - November 2026
 

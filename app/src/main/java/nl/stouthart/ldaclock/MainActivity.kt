@@ -30,6 +30,7 @@ import android.text.format.DateFormat
 import android.text.style.ForegroundColorSpan
 import android.util.TypedValue
 import android.view.View
+import android.widget.SeekBar
 import android.widget.TextView
 import java.util.Date
 
@@ -62,6 +63,8 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
     private lateinit var state: TextView
     private lateinit var pair: TextView
     private lateinit var summary: TextView
+    private lateinit var rate: SeekBar
+    private lateinit var rateValue: TextView
     private lateinit var lock: TextView
     private lateinit var last: TextView
     private var a2dp: BluetoothA2dp? = null
@@ -87,6 +90,8 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
         state = findViewById(R.id.state)
         pair = findViewById(R.id.pair)
         summary = findViewById(R.id.summary)
+        rate = findViewById(R.id.rate)
+        rateValue = findViewById(R.id.rate_value)
         lock = findViewById(R.id.lock)
         last = findViewById(R.id.last)
         findViewById<TextView>(R.id.copyright).text = getString(R.string.copyright, BuildConfig.VERSION_NAME)
@@ -96,6 +101,18 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
             lock.setText(R.string.locking)
             startForegroundService(Intent(this, LockService::class.java))
         }
+        // Saved at once; the next lock, from here or the tile, aims at it. Never a lock by itself.
+        rate.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar, p: Int, user: Boolean) {
+                if (!user) return // showLast() set it.
+                Rate.set(this@MainActivity, Rate.HZ[p])
+                showLast()
+            }
+
+            override fun onStartTrackingTouch(s: SeekBar) = Unit
+
+            override fun onStopTrackingTouch(s: SeekBar) = Unit
+        })
         if (checkSelfPermission(BLUETOOTH_CONNECT) != PERMISSION_GRANTED) requestPermissions(arrayOf(BLUETOOTH_CONNECT), 0)
         appearance()
     }
@@ -196,8 +213,11 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
 
     private fun showLast() {
         val p = Phone.path(this)
-        summary.text = if (p?.hardware == true) getString(R.string.lock_summary_direct, khz(p.hz))
-        else getString(R.string.lock_summary_hop, khz(p?.hz ?: 44100))
+        val hz = Rate.target(this, p) // Until the slider is moved, the phone's own, known after the first lock.
+        rate.progress = Rate.HZ.indexOf(hz).coerceAtLeast(0)
+        rateValue.text = khz(hz)
+        rate.stateDescription = rateValue.text // TalkBack says "48 kHz", not "33 percent".
+        summary.text = getString(if (p?.hardware == true) R.string.lock_summary_direct else R.string.lock_summary_hop, khz(hz))
         Last.notice?.let {
             last.text = it
             last.shown = true
