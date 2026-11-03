@@ -40,7 +40,11 @@ object Last {
 
     private fun prefs(c: Context) = c.getSharedPreferences("last", Context.MODE_PRIVATE)
 
+    /** The last attempt locked: its history, which a reconnect afterwards doesn't change. */
     fun ok(c: Context) = prefs(c).getBoolean("ok", false)
+
+    /** The lock still holds, as far as the tile knows: cleared by [expire]. */
+    fun current(c: Context) = prefs(c).getBoolean("current", ok(c))
 
     fun text(c: Context): String? = prefs(c).getString("text", null)
 
@@ -53,22 +57,27 @@ object Last {
     /** The LDAC rate the last lock ended on. */
     fun hz(c: Context) = prefs(c).getInt("hz", 44100)
 
-    fun save(c: Context, ok: Boolean, text: String, tile: String, tookMs: Long = 0, hz: Int = 44100) {
+    /** The LDAC quality the last lock aimed at. */
+    fun quality(c: Context) = prefs(c).getLong("q", Quality.HIGH)
+
+    fun save(c: Context, ok: Boolean, text: String, tile: String, tookMs: Long = 0, hz: Int = 44100, q: Long = Quality.HIGH) {
         prefs(c).edit()
             .putBoolean("ok", ok)
+            .putBoolean("current", ok)
             .putString("text", text)
             .putString("tile", tile)
             .putLong("at", System.currentTimeMillis())
             .putLong("took", tookMs)
             .putInt("hz", hz)
+            .putLong("q", q)
             .apply()
         notice = null
         notify(c)
     }
 
-    /** The lock lasts one connection; a reconnect resets the codec to the phone's default. */
+    /** The lock lasts one connection; a reconnect resets the codec to the phone's default. The history stays. */
     fun expire(c: Context) {
-        prefs(c).edit().putBoolean("ok", false).putString("tile", c.getString(R.string.not_locked)).apply()
+        prefs(c).edit().putBoolean("current", false).putString("tile", c.getString(R.string.not_locked)).apply()
         notify(c)
     }
 

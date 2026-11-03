@@ -187,7 +187,7 @@
                 android:textColor="@color/text"
                 android:textSize="16sp" />
 
-            <!-- As UPnP Cast's Polling interval: a 40dp icon slot, the slider, the value at the end. -->
+            <!-- A 40dp icon slot, the slider, the value at the end. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -226,6 +226,32 @@
             </LinearLayout>
 
             <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:fontFamily="sans-serif-medium"
+                android:text="@string/quality"
+                android:textColor="@color/text"
+                android:textSize="16sp" />
+
+            <!-- HIGH and MID, labelled with their kbps at the chosen rate (909/606 or 990/660). -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/quality_high"
+                    style="@style/Segment"
+                    android:layout_marginEnd="8dp" />
+
+                <TextView
+                    android:id="@+id/quality_mid"
+                    style="@style/Segment" />
+            </LinearLayout>
+
+            <TextView
                 android:id="@+id/lock"
                 style="@style/Button"
                 android:layout_marginTop="16dp"
@@ -244,50 +270,83 @@
                 android:visibility="gone" />
         </LinearLayout>
 
-        <!-- Settings: Appearance only, as on UPnP Cast's main screen. -->
+        <!-- Settings: the title row opens and closes the card; closed at first, then as it was left. -->
         <LinearLayout
             style="@style/Card"
-            android:layout_marginTop="16dp">
+            android:layout_marginTop="16dp"
+            android:animateLayoutChanges="true">
 
             <!-- No bar: it marks a title with a summary line, as on Lock; Settings is a title alone. -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-medium"
-                android:text="@string/settings"
-                android:textColor="@color/text"
-                android:textSize="20sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:fontFamily="sans-serif-medium"
-                android:text="@string/appearance"
-                android:textColor="@color/text"
-                android:textSize="16sp" />
-
+            <!-- 48dp to tap; the -10dp margins keep the title where it was (top and bottom apart: Android
+                 ignores a negative layout_marginVertical). -->
             <LinearLayout
+                android:id="@+id/settings_header"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
+                android:layout_marginTop="-10dp"
+                android:layout_marginBottom="-10dp"
+                android:background="?android:attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:minHeight="48dp"
                 android:orientation="horizontal">
 
                 <TextView
-                    android:id="@+id/appearance_system"
-                    style="@style/Segment"
-                    android:text="@string/system_default" />
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="@string/settings"
+                    android:textColor="@color/text"
+                    android:textSize="20sp" />
 
-                <TextView
-                    android:id="@+id/appearance_light"
-                    style="@style/Segment"
-                    android:layout_marginHorizontal="8dp"
-                    android:text="@string/light_mode" />
+                <!-- Down while closed, turned up while open. -->
+                <ImageView
+                    android:id="@+id/settings_chevron"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_expand" />
+            </LinearLayout>
 
+            <LinearLayout
+                android:id="@+id/settings_body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <!-- Appearance only. -->
                 <TextView
-                    android:id="@+id/appearance_dark"
-                    style="@style/Segment"
-                    android:text="@string/dark_mode" />
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="@string/appearance"
+                    android:textColor="@color/text"
+                    android:textSize="16sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/appearance_system"
+                        style="@style/Segment"
+                        android:text="@string/system_default" />
+
+                    <TextView
+                        android:id="@+id/appearance_light"
+                        style="@style/Segment"
+                        android:layout_marginHorizontal="8dp"
+                        android:text="@string/light_mode" />
+
+                    <TextView
+                        android:id="@+id/appearance_dark"
+                        style="@style/Segment"
+                        android:text="@string/dark_mode" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
 

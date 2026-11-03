@@ -96,7 +96,7 @@ class LockService : Service(), BluetoothProfile.ServiceListener {
                 Last.save(this, false, getString(R.string.no_bluetooth), getString(R.string.failed))
                 return
             }
-            val device = activeHeadphone(a2dp)
+            val device = activeHeadphones(a2dp)
             if (device == null || !isPaired(device)) {
                 val why = getString(if (device == null) R.string.no_device else R.string.not_paired)
                 Last.save(this, false, why, getString(R.string.failed))
@@ -117,26 +117,35 @@ class LockService : Service(), BluetoothProfile.ServiceListener {
                 Last.notice(this, getString(R.string.pause_first))
                 return
             }
-            val plan = plan(status, path, Rate.target(this, path))
-            val steps = Hop(this, a2dp, device, plan.steps, resend = !hardware).run()
+            val q = Quality.target(this)
+            val plan = plan(status, path, Rate.target(this, path), q)
+            if (plan == null) { // Nothing is changed: a detour that can't end on LDAC would leave a worse codec.
+                Last.save(this, false, getString(R.string.no_ldac), getString(R.string.failed))
+                return
+            }
+            val steps = Hop(this, a2dp, device, plan.steps, resend = !hardware, readable = hardware).run()
             val t1 = SystemClock.elapsedRealtimeNanos()
             val e = if (hardware) null else ldacEncoder() // The DSP's encoder isn't in the dump.
             val took = (t1 - t0) / 1_000_000
             Log.i(
-                TAG, "Hop ${device.address.takeLast(5)} $took ms (${if (hardware) "hardware" else "software"} ${plan.hz} Hz, " +
-                    "detect $detect µs; $steps), dumpsys ${(SystemClock.elapsedRealtimeNanos() - t1) / 1_000_000} ms: $e",
+                TAG, "Hop ${device.address.takeLast(5)} $took ms (${if (hardware) "hardware" else "software"} ${plan.hz} Hz " +
+                    "${Quality.name(q)}, detect $detect µs; $steps), dumpsys ${(SystemClock.elapsedRealtimeNanos() - t1) / 1_000_000} ms: $e",
             )
             when {
+                // A software encoder with DUMP granted should be in the dump: without it, the quality is unknown.
+                e == null && !hardware && dumpable() -> Last.save(
+                    this, false, getString(R.string.unverified_text), getString(R.string.unverified), took, plan.hz, q,
+                )
                 // No encoder block (Astra, or no DUMP): the reported config is all there is.
                 e == null -> {
                     val c = a2dp.codecStatus(device)?.codecConfig
-                    val ok = c.lockedAt(plan.hz, quality = hardware)
+                    val ok = c.lockedAt(plan.hz, q, readable = hardware)
                     Last.save(
-                        this, ok, c?.label().orEmpty(), getString(if (ok) R.string.locked else R.string.failed), took, plan.hz,
+                        this, ok, c?.label().orEmpty(), getString(if (ok) R.string.locked else R.string.failed), took, plan.hz, q,
                     )
                 }
-                e.lockedAt(plan.hz) -> Last.save(this, true, e.toString(), getString(R.string.kbps, e.kbps), took, plan.hz)
-                else -> Last.save(this, false, e.toString(), e.quality, took, plan.hz)
+                e.lockedAt(plan.hz, q) -> Last.save(this, true, e.toString(), getString(R.string.kbps, e.kbps), took, plan.hz, q)
+                else -> Last.save(this, false, e.toString(), e.quality, took, plan.hz, q)
             }
         } catch (e: SecurityException) {
             Log.w(TAG, "Lock", e)

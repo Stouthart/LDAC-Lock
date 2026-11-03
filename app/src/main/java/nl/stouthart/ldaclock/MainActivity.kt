@@ -24,6 +24,7 @@ import android.content.IntentSender
 import android.content.pm.PackageManager.PERMISSION_GRANTED
 import android.content.res.ColorStateList
 import android.graphics.Paint
+import android.graphics.Rect
 import android.os.Bundle
 import android.text.SpannableString
 import android.text.format.DateFormat
@@ -65,13 +66,18 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
     private lateinit var summary: TextView
     private lateinit var rate: SeekBar
     private lateinit var rateValue: TextView
+    private lateinit var qualities: Array<TextView>
     private lateinit var lock: TextView
     private lateinit var last: TextView
     private var a2dp: BluetoothA2dp? = null
     private var pending = false // A proxy request is out; Android answers once Bluetooth is on.
-    private var gen = 0 // Drops encoder reads that a newer show() has overtaken.
+    private var started = false // Between onStart and onStop: a proxy that answers later is closed, not used.
+    private var gen = 0 // Drops encoder reads overtaken by a newer show(), by Bluetooth going off, or by onStop.
+    private var reading = false // An encoder read is out, one at a time; a show() meanwhile asks for another.
+    private var reread = false
+    private var config: BluetoothCodecConfig? = null // The reported config the next encoder read is shown with.
 
-    // Live while visible: Bluetooth on/off, a headphone (dis)connecting, the active headset changing.
+    // Live while visible: Bluetooth on/off, headphones (dis)connecting, the active headset changing.
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
             if (i.action == BluetoothAdapter.ACTION_STATE_CHANGED) connect() else show()
@@ -92,6 +98,7 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
         summary = findViewById(R.id.summary)
         rate = findViewById(R.id.rate)
         rateValue = findViewById(R.id.rate_value)
+        qualities = arrayOf(findViewById(R.id.quality_high), findViewById(R.id.quality_mid))
         lock = findViewById(R.id.lock)
         last = findViewById(R.id.last)
         findViewById<TextView>(R.id.copyright).text = getString(R.string.copyright, BuildConfig.VERSION_NAME)
@@ -113,8 +120,40 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
 
             override fun onStopTrackingTouch(s: SeekBar) = Unit
         })
+        for ((i, v) in qualities.withIndex()) v.setOnClickListener { // The same: saved, never a lock.
+            Quality.set(this, Quality.ALL[i])
+            showLast()
+        }
         if (checkSelfPermission(BLUETOOTH_CONNECT) != PERMISSION_GRANTED) requestPermissions(arrayOf(BLUETOOTH_CONNECT), 0)
         appearance()
+        fold()
+    }
+
+    /** The Settings card opens and closes with a tap on its title: closed at first, then as it was left. */
+    private fun fold() {
+        val prefs = getSharedPreferences("settings", MODE_PRIVATE)
+        val header: View = findViewById(R.id.settings_header)
+        val body: View = findViewById(R.id.settings_body)
+        val chevron: View = findViewById(R.id.settings_chevron)
+        fun open(o: Boolean) {
+            body.shown = o
+            header.stateDescription = getString(if (o) R.string.expanded else R.string.collapsed)
+        }
+        open(prefs.getBoolean("open", false)) // Closed at first: the settings are rarely changed.
+        chevron.rotation = if (body.shown) 180f else 0f
+        header.setOnClickListener {
+            val o = !body.shown
+            prefs.edit().putBoolean("open", o).apply()
+            open(o)
+            chevron.animate().rotation(if (o) 180f else 0f).duration = 200
+            // Once laid out, scrolled into view: the card is the last on the screen, so it opens below the fold.
+            if (o) body.addOnLayoutChangeListener(object : View.OnLayoutChangeListener {
+                override fun onLayoutChange(v: View, l: Int, t: Int, r: Int, b: Int, ol: Int, ot: Int, or: Int, ob: Int) {
+                    v.removeOnLayoutChangeListener(this)
+                    v.post { v.requestRectangleOnScreen(Rect(0, 0, v.width, v.height), false) }
+                }
+            })
+        }
     }
 
     /** System default, Light mode, Dark mode: Android recreates the screen in the new mode. */
@@ -122,10 +161,7 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
         val choices = arrayOf<TextView>(findViewById(R.id.appearance_system), findViewById(R.id.appearance_light), findViewById(R.id.appearance_dark))
         fun mark() {
             val chosen = Appearance.get(this)
-            for ((i, v) in choices.withIndex()) {
-                v.setBackgroundResource(if (i == chosen) R.drawable.segment_on else R.drawable.segment)
-                v.setTextColor(getColor(if (i == chosen) R.color.on_accent else R.color.text))
-            }
+            for ((i, v) in choices.withIndex()) segment(v, i == chosen)
         }
         for ((i, v) in choices.withIndex()) v.setOnClickListener {
             if (i == Appearance.get(this)) return@setOnClickListener
@@ -151,6 +187,7 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
 
     override fun onStart() {
         super.onStart()
+        started = true
         Last.listeners += refresh
         val filter = IntentFilter().apply {
             addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
@@ -164,6 +201,8 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
     }
 
     override fun onStop() {
+        started = false
+        gen++
         unregisterReceiver(receiver)
         Last.listeners -= refresh
         Last.notice = null
@@ -189,12 +228,19 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
 
     override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
         pending = false
+        if (!started) return adapter.closeProfileProxy(A2DP, proxy) // Asked before onStop, answered after it.
         a2dp = proxy as BluetoothA2dp
         show()
     }
 
     override fun onServiceDisconnected(profile: Int) {
         a2dp = null
+    }
+
+    private fun segment(v: TextView, on: Boolean) {
+        v.isSelected = on // TalkBack says "Selected" on the chosen one.
+        v.setBackgroundResource(if (on) R.drawable.segment_on else R.drawable.segment)
+        v.setTextColor(getColor(if (on) R.color.on_accent else R.color.text))
     }
 
     private fun enable(v: View, on: Boolean) {
@@ -217,7 +263,13 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
         rate.progress = Rate.HZ.indexOf(hz).coerceAtLeast(0)
         rateValue.text = khz(hz)
         rate.stateDescription = rateValue.text // TalkBack says "48 kHz", not "33 percent".
-        summary.text = getString(if (p?.hardware == true) R.string.lock_summary_direct else R.string.lock_summary_hop, khz(hz))
+        val q = Quality.target(this)
+        for ((i, v) in qualities.withIndex()) {
+            v.text = getString(R.string.kbps, Quality.kbps(Quality.ALL[i], hz))
+            segment(v, Quality.ALL[i] == q)
+        }
+        val s = if (p?.hardware == true) R.string.lock_summary_direct else R.string.lock_summary_hop
+        summary.text = getString(s, khz(hz), Quality.name(q))
         Last.notice?.let {
             last.text = it
             last.shown = true
@@ -235,8 +287,9 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
         }
     }
 
-    /** Bluetooth off, no headphone, or no permission: only the message in the device card. */
+    /** Bluetooth off, no headphones, or no permission: only the message in the device card. */
     private fun empty(message: Int) {
+        gen++ // A read still out would show a codec under this message.
         name.setText(message)
         meta.shown = false
         panel.shown = false
@@ -247,11 +300,11 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
 
     private fun show() {
         val a = a2dp ?: return
-        val g = ++gen
+        gen++
         showLast()
         lock.setText(R.string.lock_now)
         if (checkSelfPermission(BLUETOOTH_CONNECT) != PERMISSION_GRANTED) return empty(R.string.no_bluetooth)
-        val d = activeHeadphone(a) ?: return empty(R.string.no_device)
+        val d = activeHeadphones(a) ?: return empty(R.string.no_device)
 
         val kind = getString(d.kind())
         name.text = d.name ?: d.address
@@ -277,28 +330,55 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
         // The DSP's encoder isn't in the dump, so a hardware path goes straight to the reported config.
         if (Phone.path(this)?.hardware == true) return encoder(null, c)
         // The reported config can't be trusted for quality; the encoder's state can (~40 ms, so off the main thread).
+        config = c
+        if (!dumpable()) return encoder(null, c) // Not even tried without DUMP.
+        read()
+    }
+
+    /** One encoder read at a time; a show() meanwhile gets one more read when this one is back, for its state. */
+    private fun read() {
+        if (reading) {
+            reread = true
+            return
+        }
+        reading = true
+        val g = gen
         Thread {
             val e = ldacEncoder()
-            runOnUiThread { if (g == gen) encoder(e, c) }
+            runOnUiThread {
+                reading = false
+                if (reread) {
+                    reread = false
+                    if (started) read()
+                } else if (g == gen) {
+                    config?.let { encoder(e, it) }
+                }
+            }
         }.start()
     }
 
     private fun encoder(e: Encoder?, c: BluetoothCodecConfig) {
         val hz = Last.hz(this)
+        val q = Last.quality(this)
+        val hardware = Phone.path(this)?.hardware == true
+        // A software encoder belongs in the dump once DUMP is granted: a read that found none can't vouch for the lock.
+        if (e == null && !hardware && dumpable()) {
+            return state(R.drawable.ic_warning, R.color.warning, getString(R.string.unverified_state))
+        }
         if (e == null) { // Astra (offloaded LDAC) or no DUMP: rate and bits only.
-            return if (c.lockedAt(hz, quality = Phone.path(this)?.hardware == true)) {
+            return if (c.lockedAt(hz, q, readable = hardware)) {
                 state(R.drawable.ic_check, R.color.text2, getString(R.string.locked_unreadable))
             } else {
                 state(R.drawable.ic_warning, R.color.warning, getString(R.string.not_locked)) // The panel shows the rest.
             }
         }
         spec.text = specText(e.hz, e.bits, e.mode, e.kbps)
-        if (e.lockedAt(hz)) state(R.drawable.ic_check, R.color.success, getString(R.string.locked_state, e.quality))
+        if (e.lockedAt(hz, q)) state(R.drawable.ic_check, R.color.success, getString(R.string.locked_state, e.quality))
         else state(R.drawable.ic_warning, R.color.warning, getString(R.string.not_locked_state, e.quality))
     }
 
     private fun pair() {
-        val d = a2dp?.let { activeHeadphone(it) } ?: return
+        val d = a2dp?.let { activeHeadphones(it) } ?: return
         enable(pair, false)
         val request = AssociationRequest.Builder()
             .addDeviceFilter(BluetoothDeviceFilter.Builder().setAddress(d.address).build())

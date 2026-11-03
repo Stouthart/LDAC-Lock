@@ -41,8 +41,8 @@ class LockTile : TileService(), BluetoothProfile.ServiceListener {
             registered = true
         }
         update()
-        // Only a tile that claims a lock needs checking: one reported-config read, no dumpsys.
-        if (Last.ok(this) && adapter.isEnabled) {
+        // Only a tile that claims a lock needs checking: one reported-config read, and on a software encoder its dump.
+        if (Last.current(this) && adapter.isEnabled) {
             t0 = SystemClock.elapsedRealtimeNanos()
             adapter.getProfileProxy(this, this, A2DP)
         }
@@ -61,14 +61,24 @@ class LockTile : TileService(), BluetoothProfile.ServiceListener {
         val t1 = SystemClock.elapsedRealtimeNanos()
         val a2dp = proxy as BluetoothA2dp
         val c = try {
-            pairedHeadphone(a2dp)?.let { a2dp.codecStatus(it)?.codecConfig }
+            pairedHeadphones(a2dp)?.let { a2dp.codecStatus(it)?.codecConfig }
         } catch (e: SecurityException) {
             null
         }
         adapter.closeProfileProxy(A2DP, a2dp)
-        if (!c.lockedAt(Last.hz(this), quality = Phone.path(this)?.hardware == true)) Last.expire(this)
+        val hz = Last.hz(this)
+        val q = Last.quality(this)
+        val hardware = Phone.path(this)?.hardware == true
         val t2 = SystemClock.elapsedRealtimeNanos()
         Log.i(TAG, "Tile check: proxy ${(t1 - t0) / 1000} µs, read ${(t2 - t1) / 1000} µs")
+        if (!c.lockedAt(hz, q, readable = hardware)) return Last.expire(this)
+        // Samsung's report can keep saying HIGH after its encoder went adaptive: its dump tells (~40 ms, off the main
+        // thread, only while a lock is claimed). A failed read proves nothing, so it leaves the tile as it is.
+        if (hardware || !dumpable()) return
+        Thread {
+            val e = ldacEncoder() ?: return@Thread
+            if (!e.lockedAt(hz, q)) mainExecutor.execute { Last.expire(this) }
+        }.start()
     }
 
     override fun onServiceDisconnected(profile: Int) {}
@@ -106,7 +116,7 @@ class LockTile : TileService(), BluetoothProfile.ServiceListener {
             t.subtitle = getString(R.string.bluetooth_off)
             t.name(R.string.bluetooth_off)
         } else {
-            val ok = Last.ok(this)
+            val ok = Last.current(this)
             t.state = if (ok) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
             t.subtitle = Last.notice ?: Last.tile(this)
             t.name(

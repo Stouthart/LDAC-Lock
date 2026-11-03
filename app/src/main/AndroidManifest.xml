@@ -13,7 +13,7 @@
         android:name="android.permission.DUMP"
         tools:ignore="ProtectedPermissions" />
 
-    <!-- enableOnBackInvokedCallback: predictive back (the peek home) on Android 14 and 15 too, as in UPnP Cast; 16 has
+    <!-- enableOnBackInvokedCallback: predictive back (the peek home) on Android 14 and 15 too; 16 has
          it by default. -->
     <application
         android:dataExtractionRules="@xml/backup_rules"

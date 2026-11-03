@@ -42,13 +42,27 @@ const val TAG = "LDACLock"
 // Hidden broadcasts of the A2DP stack.
 private const val ACTION_CODEC_CONFIG_CHANGED = "android.bluetooth.a2dp.profile.action.CODEC_CONFIG_CHANGED"
 const val ACTION_ACTIVE_DEVICE_CHANGED = "android.bluetooth.a2dp.profile.action.ACTIVE_DEVICE_CHANGED"
-const val QUALITY_990 = 1000L // LDAC codecSpecific1: 1000 = 990 kbps … 1003 = adaptive.
 private const val STEP_TIMEOUT_MS = 5000L
+private const val QUALITY_WAIT_MS = 2000L // The hardware path takes a quality-only change a moment later.
+private const val QUALITY_POLL_MS = 100L
 
-// Hidden from the SDK; reflection reaches them (BCC does the same).
-private val getCodecStatus = BluetoothA2dp::class.java.getMethod("getCodecStatus", BluetoothDevice::class.java)
-private val setCodecConfigPreference = BluetoothA2dp::class.java
-    .getMethod("setCodecConfigPreference", BluetoothDevice::class.java, BluetoothCodecConfig::class.java)
+// Hidden from the SDK; reflection reaches them (BCC does the same). An object initializes on first use, not when the
+// app starts, and a lookup that fails is null: on a firmware without them the lock says so, rather than crashing.
+private object Hidden {
+    val getCodecStatus = find("getCodecStatus", BluetoothDevice::class.java)
+    val setCodecConfigPreference =
+        find("setCodecConfigPreference", BluetoothDevice::class.java, BluetoothCodecConfig::class.java)
+    val getActiveDevice = find("getActiveDevice") // BCC uses it too.
+
+    private fun find(name: String, vararg types: Class<*>): Method? = try {
+        BluetoothA2dp::class.java.getMethod(name, *types)
+    } catch (e: Exception) {
+        null
+    }
+}
+
+/** The app may read dumps: granted over adb, as the README says. */
+fun Context.dumpable() = checkSelfPermission(Manifest.permission.DUMP) == PackageManager.PERMISSION_GRANTED
 
 private fun config(type: Int, rate: Int, bits: Int, quality: Long): BluetoothCodecConfig =
     BluetoothCodecConfig.Builder()
@@ -68,17 +82,42 @@ private fun config(type: Int, rate: Int, bits: Int, quality: Long): BluetoothCod
  */
 class Path(val hardware: Boolean, val hz: Int)
 
-/** Detects the path; needs DUMP and LDAC as the current codec. Null if it can't tell. */
+/**
+ * Detects the path; needs DUMP and LDAC as the current codec. Null when it can't tell for sure, as after a dump that
+ * timed out or came back without its A2DP part: the answer is kept for the whole firmware build, so no guesses.
+ */
 fun Context.detectPath(): Path? {
-    if (checkSelfPermission(Manifest.permission.DUMP) != PackageManager.PERMISSION_GRANTED) return null
-    // Software LDAC leaves an "A2DP LDAC State" block in the Bluetooth dump; hardware LDAC leaves none.
-    if (dumpsys("bluetooth_manager") { r -> skipTo(r, "A2DP LDAC State:") } ?: return null) return Path(false, 44100)
-    // Behind a fixed 48 kHz mixer, LDAC at 44.1 kHz means a second resample (48 → 44.1) in the DSP.
-    return Path(true, if (a2dpMixerHz() == 48000) 48000 else 44100)
+    if (!dumpable()) return null
+    val software = dumpsys("bluetooth_manager") { parseSoftware(it) } ?: return null
+    if (software) return Path(false, 44100)
+    // Behind a fixed 48 kHz mixer, LDAC at 44.1 kHz means a second resample (48 → 44.1) in the DSP. Unread, the next
+    // lock asks again rather than keeping 44.1 kHz for good.
+    val mixer = a2dpMixerHz() ?: return null
+    return Path(true, if (mixer == 48000) 48000 else 44100)
+}
+
+/**
+ * From a Bluetooth dump: true for software LDAC, which leaves an "A2DP LDAC State" block; false for hardware, which
+ * leaves none. Null when the dump can't tell: it timed out, or ended without the adapter's A2DP status line, which
+ * both the S25 and the Astra print ("A2dpOffloadEnabled: true"). Any "a2dp" won't do: the feature flags at the top
+ * of every dump have it.
+ */
+fun parseSoftware(r: BufferedReader): Boolean? {
+    var a2dp = false
+    while (true) {
+        val l = r.readLine() ?: break
+        if (l == "A2DP LDAC State:") return true
+        if ("DUMP TIMEOUT" in l) return null // dumpsys's own note when the service didn't finish.
+        if (!a2dp && l.trimStart().startsWith("A2dpOffloadEnabled:")) a2dp = true
+    }
+    return if (a2dp) false else null
 }
 
 /** The sample rate of the mixer thread feeding A2DP, from the audio_flinger dump (~10–16 ms). */
-private fun a2dpMixerHz() = dumpsys("media.audio_flinger") { r ->
+private fun a2dpMixerHz() = dumpsys("media.audio_flinger") { parseMixerHz(it) }
+
+/** The A2DP mixer thread's rate in an audio_flinger dump; null without one, or with a rate it doesn't give. */
+fun parseMixerHz(r: BufferedReader): Int? {
     var mixer = false
     var hz = 0
     while (true) {
@@ -89,10 +128,10 @@ private fun a2dpMixerHz() = dumpsys("media.audio_flinger") { r ->
                 hz = 0
             }
             l.startsWith("  Sample rate: ") -> hz = l.substring(15).substringBefore(' ').toIntOrNull() ?: 0
-            mixer && l.startsWith("  Output devices:") && "BLUETOOTH_A2DP" in l -> return@dumpsys hz
+            mixer && l.startsWith("  Output devices:") && "BLUETOOTH_A2DP" in l -> return hz.takeIf { it > 0 }
         }
     }
-    null
+    return null
 }
 
 /** Reads up to and including [line]; false if the output ends first. */
@@ -111,31 +150,39 @@ private fun rateBit(hz: Int) = when (hz) {
 }
 
 /**
- * Builds the steps to LDAC at [want] Hz from the phone's path and what the headphone can select.
- * Software or unknown: AAC → 32-bit → 24-bit. Hardware: one LDAC change.
+ * The rate a lock aims at: [want], else the first of its fallbacks that [offered] says the headphones take — within
+ * the family first (88.2 → 44.1, 96 → 48), then the other — else [want] after all.
  */
-fun plan(s: BluetoothCodecStatus?, path: Path?, want: Int): Plan {
-    val caps = s?.codecsSelectableCapabilities.orEmpty()
-    val ldac = caps.firstOrNull { it.isLdac }
-    // A rate the headphone doesn't offer falls back within its family first (88.2 → 44.1, 96 → 48), then to the other.
+fun pickRate(want: Int, offered: (Int) -> Boolean): Int {
     val order = when (want) {
         96000 -> intArrayOf(96000, 48000, 44100)
         88200 -> intArrayOf(88200, 44100, 48000)
         48000 -> intArrayOf(48000, 44100)
         else -> intArrayOf(44100, 48000)
     }
-    val hz = if (ldac == null) want else order.firstOrNull { (ldac.sampleRate and rateBit(it)) != 0 } ?: want
+    return order.firstOrNull(offered) ?: want
+}
+
+/**
+ * Builds the steps to LDAC at [want] Hz and quality [q] from the phone's path and what the headphones can select.
+ * Software or unknown: AAC → 32-bit → 24-bit. Hardware: one LDAC change. Null for headphones that don't offer LDAC,
+ * or whose codecs can't be read: a detour via AAC or SBC would then leave them there, worse off than before.
+ */
+fun plan(s: BluetoothCodecStatus?, path: Path?, want: Int, q: Long): Plan? {
+    val caps = s?.codecsSelectableCapabilities.orEmpty()
+    val ldac = caps.firstOrNull { it.isLdac } ?: return null
+    val hz = pickRate(want) { (ldac.sampleRate and rateBit(it)) != 0 }
     val rate = rateBit(hz)
-    if (path?.hardware == true) return Plan(listOf(config(SOURCE_CODEC_TYPE_LDAC, rate, BITS_PER_SAMPLE_24, QUALITY_990)), hz)
-    // A different codec forces a fresh stream; SBC is the fallback every headphone has.
+    if (path?.hardware == true) return Plan(listOf(config(SOURCE_CODEC_TYPE_LDAC, rate, BITS_PER_SAMPLE_24, q)), hz)
+    // A different codec forces a fresh stream; SBC is the fallback all headphones have.
     val via = if (caps.any { it.codecType == SOURCE_CODEC_TYPE_AAC }) SOURCE_CODEC_TYPE_AAC else SOURCE_CODEC_TYPE_SBC
     val steps = ArrayList<BluetoothCodecConfig>(3)
     steps += config(via, SAMPLE_RATE_44100, BITS_PER_SAMPLE_16, 0)
-    // The 32 → 24-bit change makes the S25's stack pass the 990 quality on; skipped where 32-bit isn't offered.
-    if (ldac == null || (ldac.bitsPerSample and BITS_PER_SAMPLE_32) != 0) {
-        steps += config(SOURCE_CODEC_TYPE_LDAC, rate, BITS_PER_SAMPLE_32, QUALITY_990)
+    // The 32 → 24-bit change makes the S25's stack pass the quality on; skipped where 32-bit isn't offered.
+    if ((ldac.bitsPerSample and BITS_PER_SAMPLE_32) != 0) {
+        steps += config(SOURCE_CODEC_TYPE_LDAC, rate, BITS_PER_SAMPLE_32, q)
     }
-    steps += config(SOURCE_CODEC_TYPE_LDAC, rate, BITS_PER_SAMPLE_24, QUALITY_990)
+    steps += config(SOURCE_CODEC_TYPE_LDAC, rate, BITS_PER_SAMPLE_24, q)
     return Plan(steps, hz)
 }
 
@@ -147,35 +194,33 @@ private fun call(m: Method, a2dp: BluetoothA2dp, vararg args: Any): Any? =
         throw e.cause ?: e
     }
 
-fun BluetoothA2dp.codecStatus(d: BluetoothDevice) = call(getCodecStatus, this, d) as BluetoothCodecStatus?
+/** The codec status, or null where it can't be read, as on a firmware without the hidden call. */
+fun BluetoothA2dp.codecStatus(d: BluetoothDevice) =
+    Hidden.getCodecStatus?.let { call(it, this, d) as BluetoothCodecStatus? }
 
 private fun BluetoothCodecConfig?.matches(t: BluetoothCodecConfig?) = this != null && t != null &&
     codecType == t.codecType && sampleRate == t.sampleRate && bitsPerSample == t.bitsPerSample
 
-// Hidden as well; BCC uses it too. Null if this firmware hides it, then the first connected headphone is used.
-private val getActiveDevice: Method? = try {
-    BluetoothA2dp::class.java.getMethod("getActiveDevice")
-} catch (e: Exception) {
-    null
-}
-
-/** The headphone Android plays media to; with two connected, only that one matters. */
-fun Context.activeHeadphone(a2dp: BluetoothA2dp): BluetoothDevice? {
+/**
+ * The headphones Android plays media to. Its answer stands, none included: with two pairs connected, the first isn't
+ * necessarily the one. Only when it can't be asked is a pair taken, and then only the one and only.
+ */
+fun Context.activeHeadphones(a2dp: BluetoothA2dp): BluetoothDevice? {
     if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) return null
-    val active = try {
-        getActiveDevice?.invoke(a2dp) as BluetoothDevice?
+    val m = Hidden.getActiveDevice ?: return a2dp.connectedDevices.singleOrNull()
+    return try {
+        m.invoke(a2dp) as BluetoothDevice?
     } catch (e: Exception) {
-        null
+        a2dp.connectedDevices.singleOrNull()
     }
-    return active ?: a2dp.connectedDevices.firstOrNull()
 }
 
 /** This app is paired with [d] as a companion device. */
 fun Context.isPaired(d: BluetoothDevice) = getSystemService(CompanionDeviceManager::class.java).myAssociations
     .any { it.deviceMacAddress?.toString().equals(d.address, ignoreCase = true) }
 
-/** The active headphone, if this app is paired with it. */
-fun Context.pairedHeadphone(a2dp: BluetoothA2dp) = activeHeadphone(a2dp)?.takeIf { isPaired(it) }
+/** The active headphones, if this app is paired with them. */
+fun Context.pairedHeadphones(a2dp: BluetoothA2dp) = activeHeadphones(a2dp)?.takeIf { isPaired(it) }
 
 fun khz(hz: Int) = if (hz % 1000 == 0) "${hz / 1000} kHz" else "${hz / 1000.0} kHz"
 
@@ -219,11 +264,11 @@ val BluetoothCodecConfig.mode get() = if (channelMode == BluetoothCodecConfig.CH
 fun BluetoothCodecConfig.label() = "$codecLabel · ${specText(hz, bits, mode)}"
 
 /**
- * The reported config matches the lock. Its quality is checked only where the stack reports it faithfully
- * ([quality]: the hardware path); on the S25 it can say 1000 while the encoder runs adaptive.
+ * The reported config matches the lock. Its quality [q] is checked only where the stack reports it faithfully
+ * ([readable]: the hardware path); on the S25 it can say 1000 while the encoder runs adaptive.
  */
-fun BluetoothCodecConfig?.lockedAt(hz: Int, quality: Boolean) = this != null && isLdac && this.hz == hz &&
-    bits == 24 && (!quality || codecSpecific1 == QUALITY_990)
+fun BluetoothCodecConfig?.lockedAt(hz: Int, q: Long, readable: Boolean) = this != null && isLdac && this.hz == hz &&
+    bits == 24 && (!readable || codecSpecific1 == q)
 
 /** Runs the hop on the calling thread, which it blocks; throws if a step isn't confirmed in time. */
 class Hop(
@@ -232,19 +277,37 @@ class Hop(
     private val device: BluetoothDevice,
     private val steps: List<BluetoothCodecConfig>,
     private val resend: Boolean, // Also send a step that already matches (its quality may not have landed).
+    private val readable: Boolean, // The stack reports the quality faithfully (hardware): a step waits for it too.
 ) : BroadcastReceiver() {
-    @Volatile private var done = CountDownLatch(1)
-    @Volatile private var target: BluetoothCodecConfig? = null
+    // A step's target and its latch, published as one: a late broadcast for the step before can't end this wait.
+    private class Waiting(val target: BluetoothCodecConfig) {
+        val done = CountDownLatch(1)
+    }
+
+    @Volatile private var waiting: Waiting? = null
 
     override fun onReceive(c: Context, i: Intent) {
+        val w = waiting ?: return
         if (i.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java) == device &&
             i.getParcelableExtra(BluetoothCodecStatus.EXTRA_CODEC_STATUS, BluetoothCodecStatus::class.java)
-                ?.codecConfig.matches(target)
-        ) done.countDown()
+                ?.codecConfig.matches(w.target)
+        ) w.done.countDown()
+    }
+
+    /** Reads the reported quality until it's [t]'s, within QUALITY_WAIT_MS; false if it never got there. */
+    private fun settled(t: BluetoothCodecConfig): Boolean {
+        val end = SystemClock.elapsedRealtime() + QUALITY_WAIT_MS
+        while (a2dp.codecStatus(device)?.codecConfig?.codecSpecific1 != t.codecSpecific1) {
+            if (SystemClock.elapsedRealtime() >= end) return false
+            Thread.sleep(QUALITY_POLL_MS)
+        }
+        return true
     }
 
     /** Returns one line for the log: each step's time in µs and what ended its wait. */
     fun run(): String {
+        val set = Hidden.setCodecConfigPreference
+            ?: throw IllegalStateException("This phone doesn't take codec changes")
         // Only a sender holding BLUETOOTH_PRIVILEGED (the Bluetooth stack) can end a wait.
         ctx.registerReceiver(
             this, IntentFilter(ACTION_CODEC_CONFIG_CHANGED), Manifest.permission.BLUETOOTH_PRIVILEGED, null,
@@ -254,16 +317,18 @@ class Hop(
         try {
             for ((n, t) in steps.withIndex()) {
                 val t0 = SystemClock.elapsedRealtimeNanos()
-                done = CountDownLatch(1)
-                target = t
+                val w = Waiting(t)
+                waiting = w
                 val cur = a2dp.codecStatus(device)?.codecConfig
-                val already = cur.matches(t) // Codec, rate and bits: no broadcast will come, so don't wait.
+                val already = cur.matches(t) // Codec, rate and bits: no broadcast will come, so don't wait for one.
                 val same = already && cur?.codecSpecific1 == t.codecSpecific1
-                if (!same || resend) call(setCodecConfigPreference, a2dp, device, t)
+                if (!same || resend) call(set, a2dp, device, t)
                 val how = when {
                     same && !resend -> "already, not sent"
+                    // Only the quality changes, as HIGH → MID: no broadcast either; the report follows a moment later.
+                    already && readable -> if (settled(t)) "quality" else "quality not seen"
                     already -> "already"
-                    done.await(STEP_TIMEOUT_MS, TimeUnit.MILLISECONDS) -> "broadcast"
+                    w.done.await(STEP_TIMEOUT_MS, TimeUnit.MILLISECONDS) -> "broadcast"
                     a2dp.codecStatus(device)?.codecConfig.matches(t) -> "status"
                     else -> throw IllegalStateException("Step ${n + 1} not confirmed")
                 }
@@ -271,6 +336,7 @@ class Hop(
                 s.append(n + 1).append(": ").append((SystemClock.elapsedRealtimeNanos() - t0) / 1000).append(" µs ").append(how)
             }
         } finally {
+            waiting = null
             ctx.unregisterReceiver(this)
         }
         return s.toString()
@@ -278,8 +344,8 @@ class Hop(
 }
 
 class Encoder(val hz: Int, val bits: Int, val mode: String, val quality: String, val kbps: Int) {
-    // HIGH is the 990 setting; at 44.1 kHz it runs at 909 kbps, so check the mode, not the rate.
-    fun lockedAt(hz: Int) = this.hz == hz && bits == 24 && quality == "HIGH"
+    // The mode, not the kbps: HIGH runs at 909 kbps at 44.1 kHz, MID at 606.
+    fun lockedAt(hz: Int, q: Long) = this.hz == hz && bits == 24 && quality == Quality.name(q)
 
     override fun toString() = "LDAC · ${specText(hz, bits, mode, kbps)} · $quality"
 }
@@ -288,7 +354,8 @@ class Encoder(val hz: Int, val bits: Int, val mode: String, val quality: String,
 private fun <T> dumpsys(service: String, read: (BufferedReader) -> T?): T? {
     val p = try {
         // stderr joins stdout, which is read: a full, unread stderr pipe could otherwise stall the dump.
-        ProcessBuilder("dumpsys", service).redirectErrorStream(true).start()
+        // -T: a service that hangs gives up after 2 s, not dumpsys's default 10 (the S25's whole dump takes ~0.35 s).
+        ProcessBuilder("dumpsys", "-T", "2000", service).redirectErrorStream(true).start()
     } catch (e: Exception) {
         return null
     }
@@ -303,12 +370,15 @@ private fun <T> dumpsys(service: String, read: (BufferedReader) -> T?): T? {
 }
 
 /**
- * The LDAC encoder's real state from dumpsys (needs DUMP, granted over adb), or null.
+ * The LDAC encoder's real state from dumpsys, or null: without DUMP (granted over adb) not even tried.
  * Stops reading after the LDAC block: a full dump costs ~260 ms on the S25.
  * Null on the Astra too: its offloaded LDAC leaves no block in the dump.
  */
-fun ldacEncoder() = dumpsys("bluetooth_manager") { r ->
-    if (!skipTo(r, "A2DP LDAC State:")) return@dumpsys null
+fun Context.ldacEncoder() = if (dumpable()) dumpsys("bluetooth_manager") { parseLdac(it) } else null
+
+/** The encoder block of a Bluetooth dump, or null without one. */
+fun parseLdac(r: BufferedReader): Encoder? {
+    if (!skipTo(r, "A2DP LDAC State:")) return null
     var hz = 0
     var bits = 0
     var mode = "Stereo"
@@ -317,15 +387,15 @@ fun ldacEncoder() = dumpsys("bluetooth_manager") { r ->
         val l = r.readLine() ?: break
         when {
             l.startsWith("  Config: ") -> { // "  Config: Rate=44100 Bits=24 Mode=STEREO"
-                hz = l.substringAfter("Rate=").substringBefore(' ').toInt()
-                bits = l.substringAfter("Bits=").substringBefore(' ').toInt()
+                hz = l.substringAfter("Rate=").substringBefore(' ').toIntOrNull() ?: 0
+                bits = l.substringAfter("Bits=").substringBefore(' ').toIntOrNull() ?: 0
                 if (l.endsWith("MONO")) mode = "Mono"
             }
-            l.startsWith("  LDAC quality mode") -> quality = l.substringAfter(": ")
+            l.startsWith("  LDAC quality mode") -> quality = l.substringAfter(": ").trim()
             l.startsWith("  LDAC transmission bitrate") ->
-                return@dumpsys Encoder(hz, bits, mode, quality, l.substringAfter(": ").trim().toInt())
+                return Encoder(hz, bits, mode, quality, l.substringAfter(": ").trim().toIntOrNull() ?: 0)
             !l.startsWith(" ") -> break
         }
     }
-    null
+    return null
 }

@@ -3,7 +3,7 @@ package nl.stouthart.ldaclock
 import android.app.UiModeManager
 import android.content.Context
 
-/** The Appearance setting, as in UPnP Cast: 0 System default, 1 Light mode, 2 Dark mode. */
+/** The Appearance setting: 0 System default, 1 Light mode, 2 Dark mode. */
 object Appearance {
     private fun prefs(c: Context) = c.getSharedPreferences("appearance", Context.MODE_PRIVATE)
 
