@@ -91,6 +91,10 @@ class LockService : Service(), BluetoothProfile.ServiceListener {
     }
 
     private fun lock(a2dp: BluetoothA2dp) {
+        // The target a failure is saved with: the last lock's, until this one is planned; then its own, which a late
+        // step may still have reached.
+        var hz = Last.hz(this)
+        var q = Last.quality(this)
         try {
             if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                 Last.save(this, false, getString(R.string.no_bluetooth), getString(R.string.failed))
@@ -112,17 +116,20 @@ class LockService : Service(), BluetoothProfile.ServiceListener {
                 detect = (SystemClock.elapsedRealtimeNanos() - t0) / 1000
             }
             val hardware = path?.hardware == true
-            // Unknown (no DUMP) could be a hardware phone, where a change during playback means silence.
+            // Unknown (no DUMP) could be a hardware phone, where a change during playback means silence. Asked once,
+            // before the hop: the hardware path's is one change, and a detour stopped halfway would leave AAC on.
             if (path?.hardware != false && a2dp.isA2dpPlaying(device)) {
                 Last.notice(this, getString(R.string.pause_first))
                 return
             }
-            val q = Quality.target(this)
-            val plan = plan(status, path, Rate.target(this, path), q)
+            val want = Quality.target(this)
+            val plan = plan(status, path, Rate.target(this, path), want)
             if (plan == null) { // Nothing is changed: a detour that can't end on LDAC would leave a worse codec.
                 Last.save(this, false, getString(R.string.no_ldac), getString(R.string.failed))
                 return
             }
+            hz = plan.hz
+            q = want
             val steps = Hop(this, a2dp, device, plan.steps, resend = !hardware, readable = hardware).run()
             val t1 = SystemClock.elapsedRealtimeNanos()
             val e = if (hardware) null else ldacEncoder() // The DSP's encoder isn't in the dump.
@@ -131,28 +138,33 @@ class LockService : Service(), BluetoothProfile.ServiceListener {
                 TAG, "Hop ${device.address.takeLast(5)} $took ms (${if (hardware) "hardware" else "software"} ${plan.hz} Hz " +
                     "${Quality.name(q)}, detect $detect µs; $steps), dumpsys ${(SystemClock.elapsedRealtimeNanos() - t1) / 1_000_000} ms: $e",
             )
-            when {
+            // Still the headphones it locked: after a switch meanwhile, the dump's one encoder is another pair's.
+            if (activeHeadphones(a2dp) != device) {
+                return Last.save(this, false, getString(R.string.switched_text), getString(R.string.failed), took, plan.hz, q)
+            }
+            val c = a2dp.codecStatus(device)?.codecConfig
+            if (e != null) LastRead.save(this, device.address, c.reported(), e) // For while music plays: see LastRead.
+            when (verdict(e, c.reported(), plan.hz, q, hardware, dumpable())) {
+                Verdict.LOCKED -> Last.save(this, true, e.toString(), getString(R.string.kbps, e?.kbps ?: 0), took, plan.hz, q)
+                // The Astra: its report is all there is, and faithful there.
+                Verdict.REPORTED -> Last.save(this, true, c?.label().orEmpty(), getString(R.string.locked), took, plan.hz, q)
+                Verdict.NOT_LOCKED -> Last.save(
+                    this, false, e?.toString() ?: c?.label().orEmpty(), e?.quality ?: getString(R.string.failed), took, plan.hz, q,
+                )
                 // A software encoder with DUMP granted should be in the dump: without it, the quality is unknown.
-                e == null && !hardware && dumpable() -> Last.save(
+                Verdict.UNVERIFIED -> Last.save(
                     this, false, getString(R.string.unverified_text), getString(R.string.unverified), took, plan.hz, q,
                 )
-                // No encoder block (Astra, or no DUMP): the reported config is all there is.
-                e == null -> {
-                    val c = a2dp.codecStatus(device)?.codecConfig
-                    val ok = c.lockedAt(plan.hz, q, readable = hardware)
-                    Last.save(
-                        this, ok, c?.label().orEmpty(), getString(if (ok) R.string.locked else R.string.failed), took, plan.hz, q,
-                    )
-                }
-                e.lockedAt(plan.hz, q) -> Last.save(this, true, e.toString(), getString(R.string.kbps, e.kbps), took, plan.hz, q)
-                else -> Last.save(this, false, e.toString(), e.quality, took, plan.hz, q)
+                Verdict.NO_DUMP -> Last.save(
+                    this, false, getString(R.string.no_dump_text), getString(R.string.unverified), took, plan.hz, q,
+                )
             }
         } catch (e: SecurityException) {
             Log.w(TAG, "Lock", e)
-            Last.save(this, false, getString(R.string.not_paired), getString(R.string.failed))
+            Last.save(this, false, getString(R.string.not_paired), getString(R.string.failed), 0, hz, q)
         } catch (e: Exception) {
             Log.w(TAG, "Lock", e)
-            Last.save(this, false, e.message ?: getString(R.string.failed), getString(R.string.failed))
+            Last.save(this, false, e.message ?: getString(R.string.failed), getString(R.string.failed), 0, hz, q)
         }
     }
 }

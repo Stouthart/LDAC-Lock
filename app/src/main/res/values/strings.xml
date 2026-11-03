@@ -11,13 +11,17 @@
     <string name="locked_state">Locked · %1$s quality</string>
     <string name="not_locked_state">Not locked · %1$s quality</string>
     <string name="locked_unreadable">Locked · quality not readable on this device</string>
+    <string name="checked_state">%1$s · checked %2$s</string> <!-- While music plays: the encoder as last read, at that time. -->
+    <string name="playing_state">Not verified · checked when playback stops</string>
 
     <string name="lock_title">Lock</string>
-    <string name="lock_summary_hop">AAC → LDAC %1$s · 24-bit · %2$s</string> <!-- %2$s: HIGH or MID, the encoder's names. -->
-    <string name="lock_summary_direct">LDAC %1$s · 24-bit · %2$s</string>
+    <string name="lock_summary_hop">AAC → LDAC %1$s 24-bit · %2$s</string> <!-- %2$s: HIGH or MID, the encoder's names. -->
+    <string name="lock_summary_direct">LDAC %1$s 24-bit · %2$s</string>
     <string name="sample_rate">Sample rate</string> <!-- BCC's "Sample Rate", in the app's sentence case. -->
     <string name="quality">Quality</string>
     <string name="lock_now">Lock now</string>
+    <string name="play">Play</string> <!-- The music app's, by the key a headset's button sends. -->
+    <string name="pause">Pause</string>
     <string name="last_lock">Last lock %1$s · took %2$s</string>
     <string name="last_failed">Last lock %1$s failed · %2$s</string>
 
@@ -30,6 +34,9 @@
     <string name="unverified">Not verified</string> <!-- The tile, after a lock whose encoder couldn't be read. -->
     <string name="unverified_text">encoder not readable</string> <!-- After "Last lock 21:22 failed · ". -->
     <string name="unverified_state">Not verified · encoder not readable</string>
+    <string name="no_dump_text">needs DUMP to read the encoder</string> <!-- After "Last lock 21:22 failed · ". -->
+    <string name="no_dump_state">Not verified · needs DUMP to read the encoder</string>
+    <string name="switched_text">headphones changed during the lock</string> <!-- After "Last lock 21:22 failed · ". -->
     <string name="no_ldac">These headphones don\'t support LDAC</string>
     <string name="bluetooth_off">Bluetooth off</string>
     <string name="bluetooth_timeout">Bluetooth didn\'t respond</string>
@@ -40,8 +47,8 @@
     <string name="tile_pause">Pause first</string>
 
     <!-- The Sonos app's words. -->
-    <string name="settings">Settings</string>
-    <string name="expanded">Expanded</string> <!-- The Settings card's state, for TalkBack. -->
+    <string name="app_settings">App settings</string> <!-- Sonos's is "App preferences". -->
+    <string name="expanded">Expanded</string> <!-- The App settings card's state, for TalkBack. -->
     <string name="collapsed">Collapsed</string>
     <string name="appearance">Appearance</string>
     <string name="system_default">System default</string>

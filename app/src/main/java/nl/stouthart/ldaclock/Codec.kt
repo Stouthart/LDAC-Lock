@@ -40,8 +40,15 @@ import java.util.concurrent.TimeUnit
 const val TAG = "LDACLock"
 
 // Hidden broadcasts of the A2DP stack.
-private const val ACTION_CODEC_CONFIG_CHANGED = "android.bluetooth.a2dp.profile.action.CODEC_CONFIG_CHANGED"
+const val ACTION_CODEC_CONFIG_CHANGED = "android.bluetooth.a2dp.profile.action.CODEC_CONFIG_CHANGED"
 const val ACTION_ACTIVE_DEVICE_CHANGED = "android.bluetooth.a2dp.profile.action.ACTIVE_DEVICE_CHANGED"
+
+// A codec change comes as a burst of notices (a reconnect sends a dozen within 0.3 s): one look, this long after the
+// last. On Samsung a look includes the encoder dump, which works inside the Bluetooth process, so never more often.
+const val CODEC_QUIET_MS = 500L
+// After the last playback notice, the screen and the tile read the encoder again if nothing plays by then: music takes
+// a moment to go quiet.
+const val FRESH_MS = 1500L
 private const val STEP_TIMEOUT_MS = 5000L
 private const val QUALITY_WAIT_MS = 2000L // The hardware path takes a quality-only change a moment later.
 private const val QUALITY_POLL_MS = 100L
@@ -108,7 +115,7 @@ fun parseSoftware(r: BufferedReader): Boolean? {
         val l = r.readLine() ?: break
         if (l == "A2DP LDAC State:") return true
         if ("DUMP TIMEOUT" in l) return null // dumpsys's own note when the service didn't finish.
-        if (!a2dp && l.trimStart().startsWith("A2dpOffloadEnabled:")) a2dp = true
+        if (!a2dp && l.trim() == "A2dpOffloadEnabled: true") a2dp = true // "false": no offload, so no evidence of it.
     }
     return if (a2dp) false else null
 }
@@ -224,9 +231,9 @@ fun Context.pairedHeadphones(a2dp: BluetoothA2dp) = activeHeadphones(a2dp)?.take
 
 fun khz(hz: Int) = if (hz % 1000 == 0) "${hz / 1000} kHz" else "${hz / 1000.0} kHz"
 
-/** "44.1 kHz · 24-bit · Stereo · 909 kbps", in BCC's order; kbps only when known. */
+/** "44.1 kHz 24-bit · Stereo · 909 kbps": the format as one unit, then the rest; kbps only when known. */
 fun specText(hz: Int, bits: Int, mode: String, kbps: Int = 0) =
-    if (kbps > 0) "${khz(hz)} · $bits-bit · $mode · $kbps kbps" else "${khz(hz)} · $bits-bit · $mode"
+    if (kbps > 0) "${khz(hz)} $bits-bit · $mode · $kbps kbps" else "${khz(hz)} $bits-bit · $mode"
 
 val BluetoothCodecConfig.isLdac get() = codecType == SOURCE_CODEC_TYPE_LDAC
 
@@ -263,12 +270,36 @@ val BluetoothCodecConfig.mode get() = if (channelMode == BluetoothCodecConfig.CH
 
 fun BluetoothCodecConfig.label() = "$codecLabel · ${specText(hz, bits, mode)}"
 
+/** What the stack reports of the codec, for [verdict]: plain values, so it's tested off the phone. */
+class Reported(val ldac: Boolean, val hz: Int, val bits: Int, val quality: Long)
+
+fun BluetoothCodecConfig?.reported() = this?.let { Reported(isLdac, hz, bits, codecSpecific1) }
+
 /**
- * The reported config matches the lock. Its quality [q] is checked only where the stack reports it faithfully
- * ([readable]: the hardware path); on the S25 it can say 1000 while the encoder runs adaptive.
+ * A lock's state as the service, the screen and the tile all tell it: [verdict]'s answer. Plain numbers, as Quality's:
+ * an enum's `when` costs a class in every file that asks.
  */
-fun BluetoothCodecConfig?.lockedAt(hz: Int, q: Long, readable: Boolean) = this != null && isLdac && this.hz == hz &&
-    bits == 24 && (!readable || codecSpecific1 == q)
+object Verdict {
+    const val LOCKED = 0 // The encoder itself runs at the rate and quality.
+    const val REPORTED = 1 // The hardware path's report matches, quality included: faithful there, unconfirmed by the chip.
+    const val NOT_LOCKED = 2
+    const val UNVERIFIED = 3 // A software encoder, or one not known yet, that the dump should have shown and didn't.
+    const val NO_DUMP = 4 // Rate and bits match, but without DUMP nothing reads the encoder or tells which one it is.
+}
+
+/**
+ * Whether a lock at [hz] and quality [q] holds: from the encoder [e] where the dump has it, from the report [r] on a
+ * known [hardware] path, where it's faithful. Elsewhere the report's quality says nothing: on the S25 it can read 1000
+ * while the encoder runs adaptive, so a match of rate and bits alone is never a lock. [dump]: DUMP is granted.
+ */
+fun verdict(e: Encoder?, r: Reported?, hz: Int, q: Long, hardware: Boolean, dump: Boolean): Int = when {
+    r == null || !r.ldac -> Verdict.NOT_LOCKED
+    hardware -> if (r.hz == hz && r.bits == 24 && r.quality == q) Verdict.REPORTED else Verdict.NOT_LOCKED
+    e != null -> if (e.lockedAt(hz, q)) Verdict.LOCKED else Verdict.NOT_LOCKED
+    r.hz != hz || r.bits != 24 -> Verdict.NOT_LOCKED // No encoder to ask, but the format alone says no.
+    dump -> Verdict.UNVERIFIED
+    else -> Verdict.NO_DUMP
+}
 
 /** Runs the hop on the calling thread, which it blocks; throws if a step isn't confirmed in time. */
 class Hop(
@@ -322,8 +353,12 @@ class Hop(
                 val cur = a2dp.codecStatus(device)?.codecConfig
                 val already = cur.matches(t) // Codec, rate and bits: no broadcast will come, so don't wait for one.
                 val same = already && cur?.codecSpecific1 == t.codecSpecific1
-                if (!same || resend) call(set, a2dp, device, t)
-                val how = when {
+                if (!same || resend) {
+                    // Not to a pair that stopped being the one playing: the rest of the hop changes nothing heard.
+                    check(ctx.activeHeadphones(a2dp) == device) { ctx.getString(R.string.switched_text) }
+                    call(set, a2dp, device, t)
+                }
+                var how = when {
                     same && !resend -> "already, not sent"
                     // Only the quality changes, as HIGH → MID: no broadcast either; the report follows a moment later.
                     already && readable -> if (settled(t)) "quality" else "quality not seen"
@@ -332,6 +367,9 @@ class Hop(
                     a2dp.codecStatus(device)?.codecConfig.matches(t) -> "status"
                     else -> throw IllegalStateException("Step ${n + 1} not confirmed")
                 }
+                // On the hardware path a new rate or bit depth lands first, its quality can follow: wait for that too.
+                // At once when it's there already.
+                if (readable && !already && !settled(t)) how += ", quality not seen"
                 if (n > 0) s.append(", ")
                 s.append(n + 1).append(": ").append((SystemClock.elapsedRealtimeNanos() - t0) / 1000).append(" µs ").append(how)
             }
@@ -398,4 +436,41 @@ fun parseLdac(r: BufferedReader): Encoder? {
         }
     }
     return null
+}
+
+/**
+ * Whether the app that gets the play and pause keys plays (true) or waits (false), as Spotify paused does; null
+ * without such an app, or without DUMP. The media session service's dump, not Bluetooth's: 4–20 KB, ~20 ms, and it
+ * stops at that app's state.
+ */
+fun Context.mediaPlaying() = if (dumpable()) dumpsys("media_session") { parsePlaying(it) } else null
+
+/**
+ * From a media session dump: the session named in "Media button session is <package>/<tag>/<n> (userId=0)", then its
+ * own block's "state=PlaybackState {state=PLAYING(3), …". Buffering, seeking or skipping counts as playing; stopped
+ * as waiting, as Play starts it again; none, an error or no state at all as nothing to control.
+ */
+fun parsePlaying(r: BufferedReader): Boolean? {
+    var id = ""
+    var mine = false
+    while (true) {
+        val l = r.readLine() ?: return null
+        if ("DUMP TIMEOUT" in l) return null
+        if (id.isEmpty()) {
+            if (l.startsWith("  Media button session is ")) {
+                id = l.removePrefix("  Media button session is ").substringBefore(" (userId")
+                if ('/' !in id) return null // "null": no app takes the keys.
+            }
+            continue
+        }
+        val t = l.trim()
+        if (t.endsWith(")") && " $id (userId" in t) mine = true // The block's first line: "<tag> <id> (userId=0)".
+        else if (mine && t.startsWith("state=")) {
+            return when (t.substringAfter("state=PlaybackState {state=", "").substringAfter('(').substringBefore(')').toIntOrNull()) {
+                3, 4, 5, 6, 8, 9, 10, 11 -> true
+                1, 2 -> false
+                else -> null
+            }
+        }
+    }
 }

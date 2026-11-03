@@ -73,31 +73,36 @@
                     android:textColor="@color/text2"
                     android:textSize="13sp" />
 
-                <!-- The waveform sits in this row, as in BCC, so the specs line below has the full width. -->
+                <!-- The Play/Pause button sits in this row, so the specs line below has the full width. At its height
+                     whether it shows or not, so the panel doesn't jump when it comes or goes. -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:gravity="center_vertical"
+                    android:minHeight="48dp"
                     android:orientation="horizontal">
 
                     <TextView
                         android:id="@+id/codec"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:textColor="@color/accent"
+                        android:textColor="@color/accent_text"
                         android:textSize="34sp"
                         android:textStyle="bold" />
 
+                    <!-- Green, as a lock's line; its text in the ground's colour: white on the light green (5.1:1),
+                         near-black on the dark one (9.3:1). -->
                     <TextView
                         android:id="@+id/hi_res"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="12dp"
                         android:background="@drawable/pill"
+                        android:backgroundTint="@color/success"
                         android:paddingHorizontal="10dp"
                         android:paddingVertical="3dp"
                         android:text="@string/hi_res"
-                        android:textColor="@color/on_accent"
+                        android:textColor="@color/bg"
                         android:textSize="13sp"
                         android:textStyle="bold"
                         android:visibility="gone" />
@@ -107,17 +112,26 @@
                         android:layout_height="0dp"
                         android:layout_weight="1" />
 
+                    <!-- While a music app plays or waits: the key a headset's button sends. Whole: a negative margin
+                         would have the row cut the circle's top and bottom off. -->
                     <ImageView
-                        android:layout_width="32dp"
-                        android:layout_height="32dp"
-                        android:importantForAccessibility="no"
-                        android:src="@drawable/ic_bars" />
+                        android:id="@+id/play"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:background="@drawable/circle"
+                        android:contentDescription="@string/play"
+                        android:focusable="true"
+                        android:padding="12dp"
+                        android:src="@drawable/ic_play"
+                        android:visibility="gone" />
                 </LinearLayout>
 
+                <!-- 8dp: room below the Play/Pause circle, which reaches the row's foot. -->
                 <TextView
                     android:id="@+id/spec"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
                     android:textColor="@color/text2"
                     android:textSize="15sp" />
             </LinearLayout>
@@ -201,8 +215,7 @@
                     android:layout_marginStart="-8dp"
                     android:importantForAccessibility="no"
                     android:padding="8dp"
-                    android:src="@drawable/ic_bars"
-                    android:tint="@color/text2" />
+                    android:src="@drawable/ic_bars" />
 
                 <!-- 0..3 for 44.1, 48, 88.2 and 96 kHz. -->
                 <SeekBar
@@ -295,7 +308,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:fontFamily="sans-serif-medium"
-                    android:text="@string/settings"
+                    android:text="@string/app_settings"
                     android:textColor="@color/text"
                     android:textSize="20sp" />
 

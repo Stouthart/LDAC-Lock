@@ -61,11 +61,54 @@ class ParseTest {
     }
 
     @Test
+    fun specLine() {
+        // The format as one unit, its bit depth with a hyphen, then the rest; as the other app writes a format.
+        assertEquals("44.1 kHz 24-bit · Stereo · 909 kbps", specText(44100, 24, "Stereo", 909))
+        assertEquals("96 kHz 24-bit · Stereo", specText(96000, 24, "Stereo"))
+        assertEquals("88.2 kHz 32-bit · Mono · 909 kbps", specText(88200, 32, "Mono", 909))
+    }
+
+    @Test
+    fun mediaSession() {
+        // The Astra's dump, cut short: Spotify gets the keys; the phone's own call session comes first, the Bluetooth
+        // stack's after it.
+        val astra = arrayOf(
+            "Global priority session is com.android.server.telecom/HeadsetMediaButton/1 (userId=0)",
+            "  HeadsetMediaButton com.android.server.telecom/HeadsetMediaButton/1 (userId=0)",
+            "    state=null",
+            "  Media button session is com.spotify.music/spotify-media-session/12 (userId=0)",
+            "  Sessions Stack - have 2 sessions:",
+            "    spotify-media-session com.spotify.music/spotify-media-session/12 (userId=0)",
+            "      package=com.spotify.music",
+            "      state=PlaybackState {state=PLAYING(3), position=289183, buffered position=0, speed=1.0}",
+            "    BluetoothMediaBrowserService com.android.bluetooth/BluetoothMediaBrowserService/8 (userId=0)",
+            "      state=PlaybackState {state=ERROR(7), position=0, buffered position=0, speed=0.0}",
+        )
+        assertEquals(true, parsePlaying(dump(*astra)))
+        val paused = astra.copyOf().also { it[7] = "      state=PlaybackState {state=PAUSED(2), position=289183}" }
+        assertEquals(false, parsePlaying(dump(*paused)))
+        val stopped = astra.copyOf().also { it[7] = "      state=PlaybackState {state=STOPPED(1), position=0}" }
+        assertEquals(false, parsePlaying(dump(*stopped)))
+        val buffering = astra.copyOf().also { it[7] = "      state=PlaybackState {state=BUFFERING(6), position=0}" }
+        assertEquals(true, parsePlaying(dump(*buffering)))
+        // Nothing to control: no app takes the keys, its state is none or an error, or there's no state at all.
+        assertNull(parsePlaying(dump("  Media button session is null", "  Sessions Stack - have 0 sessions:")))
+        assertNull(parsePlaying(dump(*astra.copyOf().also { it[7] = "      state=PlaybackState {state=NONE(0)}" })))
+        assertNull(parsePlaying(dump(*astra.copyOf().also { it[7] = "      state=null" })))
+        assertNull(parsePlaying(dump(*astra.copyOfRange(0, 6))))
+        assertNull(parsePlaying(dump("*** SERVICE 'media_session' DUMP TIMEOUT (2000ms) EXPIRED ***")))
+    }
+
+    @Test
     fun softwareOrHardware() {
         assertEquals(true, parseSoftware(dump(*ldacHigh)))
         // The Astra's dump: feature flags, the adapter's A2DP status, and no LDAC block.
         val astra = arrayOf("\t[■]: a2dp_cleanup_on_remove_device", "\t[ ]: a2dp_version14", "  A2dpOffloadEnabled: true", "  A2DP")
         assertEquals(false, parseSoftware(dump(*astra)))
+        // No offload, and no LDAC block yet: software that hasn't started its encoder, not hardware.
+        assertNull(parseSoftware(dump("\t[■]: a2dp_cleanup_on_remove_device", "  A2dpOffloadEnabled: false", "  A2DP")))
+        // A field that only ends in the name isn't the adapter's status line.
+        assertNull(parseSoftware(dump("    mA2dpOffloadEnabled: true")))
         // Neither: a dump that ran out of time, or one cut off after the flags, isn't evidence of hardware.
         assertNull(parseSoftware(dump(*astra.copyOfRange(0, 2))))
         assertNull(parseSoftware(dump("  A2dpOffloadEnabled: true", "*** SERVICE 'bluetooth_manager' DUMP TIMEOUT (2000ms) EXPIRED ***")))

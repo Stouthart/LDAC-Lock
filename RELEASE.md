@@ -1,8 +1,18 @@
-<!-- 1.2 - Copyright (C) 2026 Stouthart. All rights reserved. -->
+<!-- 1.3 - Copyright (C) 2026 Stouthart. All rights reserved. -->
 
 # Release notes
 
 Highlights per version, newest first.
+
+## 1.3 - November 2026
+
+- **New colours:** white and light-grey surfaces with one clear blue in light mode, near-black greys in dark; the icon on dark grey, with a touch of that blue. The **Hi-Res** badge is green, as a lock's line, and **Bluetooth off** and **No headphones connected** show in orange.
+- **Follows the codec:** the screen, and the tile while Quick Settings is open, notice the codec changing by itself, such as HIGH falling back to MID, rather than at the next look. One check per change, never on a timer: on Samsung a check reads the Bluetooth stack's state, which keeps it busy for a moment.
+- **No skips while music plays:** reading Samsung's encoder made the audio skip, at its worst when the app came back to the front. While music plays, the screen and the tile now show the encoder as last read, the screen with the time it was read, such as **Locked · HIGH quality · checked 08:06**, and read it again once playback stops. Without a read for the codec Android reports, the screen says **Not verified · checked when playback stops**. The Play/Pause button needs no read for a playing app.
+- **Play and pause in the panel:** while a music app plays or waits, a round Play/Pause button shows in **Current codec**, the key a headset's button sends: pause before a lock where one needs that, play on after. It follows playback in any app, read once per change.
+- **Sturdier verdicts:** the lock, the screen and the tile now judge a lock the same way. Without `DUMP` a match of rate and bit depth reads **Not verified · needs DUMP to read the encoder** rather than Locked. On RedMagic a lock also waits for the quality after a change of rate or bit depth, and every lock checks that the same headphones are still playing before each change and before it reports. A lock that fails, as with the headphones gone, no longer turns one that still holds into **Not locked**. A phone without A2DP offload is no longer taken for a hardware encoder.
+- **Steadier tile and screen:** the tile also notices headphones disconnecting or another pair taking over while Quick Settings is open, checks one at a time, with one more when something changed during a check, reads the encoder once music stops, and never clears a lock that finished after its check began. The screen no longer brings back an old status after the headphones disconnect, and a read that a lock overtook no longer replaces the lock's own.
+- **App settings:** the Settings card is now called App settings; opening it scrolls all of it into view, its lower edge included.
 
 ## 1.2 - November 2026
 
