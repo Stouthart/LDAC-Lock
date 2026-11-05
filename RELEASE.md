@@ -1,8 +1,13 @@
-<!-- 1.3 - Copyright (C) 2026 Stouthart. All rights reserved. -->
+<!-- 1.4 - Copyright (C) 2026 Stouthart. All rights reserved. -->
 
 # Release notes
 
 Highlights per version, newest first.
+
+## 1.4 - November 2026
+
+- **Calmer corners:** the cards, the **Current codec** panel, Quality's choices and **Lock now** share one corner, less round than before.
+- **Even spacing:** the Sample rate slider sits close under its name, its bars icon on the name's line, and as far from **Quality** as the other sections are apart. App settings' ⌄ lines up with the card's content, and its title shows its whole highlight when tapped.
 
 ## 1.3 - November 2026
 

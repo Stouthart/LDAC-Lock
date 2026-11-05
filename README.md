@@ -1,4 +1,4 @@
-<!-- 1.3 - Copyright (C) 2026 Stouthart. All rights reserved. -->
+<!-- 1.4 - Copyright (C) 2026 Stouthart. All rights reserved. -->
 
 # Lock Bluetooth LDAC at its highest quality
 
@@ -6,7 +6,7 @@ A small Android app that sets your headphones' **LDAC** connection to its highes
 
 <p align="center"><img src="docs/screenshot-s25.png" width="360" alt="LDAC Lock on a Galaxy S25 Edge, locked at LDAC 44.1 kHz, 24-bit, 909 kbps"></p>
 
-This is **version 1.3**. The [release notes](RELEASE.md) list what each version changed.
+This is **version 1.4**. The [release notes](RELEASE.md) list what each version changed.
 
 ## What it sets
 
@@ -32,10 +32,10 @@ Developed and tested on a **Samsung Galaxy S25 Edge** (One UI 9, Android 17) and
 
 ## Installation
 
-Download `LDAC-Lock-1.3.apk` from the [latest release] and open it on the phone; Android asks to allow installing apps from that source first. Or install it from a computer with the phone connected over USB or wireless debugging:
+Download `LDAC-Lock-1.4.apk` from the [latest release] and open it on the phone; Android asks to allow installing apps from that source first. Or install it from a computer with the phone connected over USB or wireless debugging:
 
 ```bash
-adb install LDAC-Lock-1.3.apk
+adb install LDAC-Lock-1.4.apk
 ```
 
 Then grant the one permission an app can't ask for itself:

@@ -201,18 +201,22 @@
                 android:textColor="@color/text"
                 android:textSize="16sp" />
 
-            <!-- A 40dp icon slot, the slider, the value at the end. -->
+            <!-- A 40dp icon slot, the slider, the value at the end. -11dp at the start: the bars, drawn 3dp into their
+                 box, start on the label's line. The box reaches 11dp above and below the bars and the slider, so -1dp
+                 at the top and -11dp at the foot count the margins from what shows: 10dp from the label, as Quality's
+                 segments are, and 20dp to what follows. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
+                android:layout_marginTop="-1dp"
+                android:layout_marginBottom="-11dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
                 <ImageView
                     android:layout_width="40dp"
                     android:layout_height="40dp"
-                    android:layout_marginStart="-8dp"
+                    android:layout_marginStart="-11dp"
                     android:importantForAccessibility="no"
                     android:padding="8dp"
                     android:src="@drawable/ic_bars" />
@@ -283,11 +287,13 @@
                 android:visibility="gone" />
         </LinearLayout>
 
-        <!-- Settings: the title row opens and closes the card; closed at first, then as it was left. -->
+        <!-- Settings: the title row opens and closes the card; closed at first, then as it was left. The card leaves
+             its padding unclipped: the title row reaches 10dp into it, above and below, and its ripple shows whole. -->
         <LinearLayout
             style="@style/Card"
             android:layout_marginTop="16dp"
-            android:animateLayoutChanges="true">
+            android:animateLayoutChanges="true"
+            android:clipToPadding="false">
 
             <!-- No bar: it marks a title with a summary line, as on Lock; Settings is a title alone. -->
             <!-- 48dp to tap; the -10dp margins keep the title where it was (top and bottom apart: Android
@@ -312,11 +318,13 @@
                     android:textColor="@color/text"
                     android:textSize="20sp" />
 
-                <!-- Down while closed, turned up while open. -->
+                <!-- Down while closed, turned up while open; ends at the card's content edge, where the Play circle
+                     ends: ⌄ stops 6dp inside its box. -->
                 <ImageView
                     android:id="@+id/settings_chevron"
                     android:layout_width="24dp"
                     android:layout_height="24dp"
+                    android:layout_marginEnd="-6dp"
                     android:importantForAccessibility="no"
                     android:src="@drawable/ic_expand" />
             </LinearLayout>
