@@ -12,8 +12,8 @@ android {
         applicationId = "nl.stouthart.ldaclock"
         minSdk = 34 // Android 14; tested on 16 (RedMagic Astra) and 17 (S25 Edge).
         targetSdk = 37
-        versionCode = 10 // Keeps counting up: the phones carried internal builds up to 5.
-        versionName = "1.4"
+        versionCode = 11 // Keeps counting up: the phones carried internal builds up to 5.
+        versionName = "1.5"
     }
 
     buildTypes {

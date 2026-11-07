@@ -57,6 +57,10 @@
 
     <string name="copyright" translatable="false">LDAC Lock %1$s · Copyright © 2026 Stouthart</string>
     <string name="no_device">No headphones connected</string>
+    <string name="battery">%1$d%%</string> <!-- The headphones' battery, in the device line. -->
+    <!-- RedMagic's mixer stays at one rate (48 kHz), as the README tells: what that means for what's heard. -->
+    <string name="resampled_once">Music at %1$s is resampled once, to the mixer\'s %2$s.</string>
+    <string name="resampled_ldac">The mixer runs at %1$s: LDAC at %2$s adds a resample.</string>
     <string name="not_paired">Pair the headphones first</string>
     <string name="no_bluetooth">Allow Nearby devices</string>
 </resources>

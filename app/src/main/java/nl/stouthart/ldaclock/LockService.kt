@@ -108,16 +108,17 @@ class LockService : Service(), BluetoothProfile.ServiceListener {
             }
             val t0 = SystemClock.elapsedRealtimeNanos()
             val status = a2dp.codecStatus(device)
-            // Detected once per firmware, while LDAC is the current codec; later locks reuse it.
-            var path = Phone.path(this)
+            // Detected once per boot and firmware, while LDAC is the current codec; later locks reuse it.
+            var path = Phone.path(this, sameBoot = true)
             var detect = 0L
             if (path == null && status?.codecConfig?.isLdac == true) {
                 path = detectPath()?.also { Phone.save(this, it) }
                 detect = (SystemClock.elapsedRealtimeNanos() - t0) / 1000
             }
             val hardware = path?.hardware == true
-            // Unknown (no DUMP) could be a hardware phone, where a change during playback means silence. Asked once,
-            // before the hop: the hardware path's is one change, and a detour stopped halfway would leave AAC on.
+            // Unknown (no DUMP) could be a hardware phone, where a change during playback means silence. Asked before
+            // the hop, and again right before its first change (Hop). Not between a detour's steps: one stopped halfway
+            // would leave AAC on.
             if (path?.hardware != false && a2dp.isA2dpPlaying(device)) {
                 Last.notice(this, getString(R.string.pause_first))
                 return
@@ -130,7 +131,9 @@ class LockService : Service(), BluetoothProfile.ServiceListener {
             }
             hz = plan.hz
             q = want
-            val steps = Hop(this, a2dp, device, plan.steps, resend = !hardware, readable = hardware).run()
+            val steps = Hop(
+                this, a2dp, device, plan.steps, resend = !hardware, readable = hardware, pauseRequired = path?.hardware != false,
+            ).run()
             val t1 = SystemClock.elapsedRealtimeNanos()
             val e = if (hardware) null else ldacEncoder() // The DSP's encoder isn't in the dump.
             val took = (t1 - t0) / 1_000_000
@@ -159,6 +162,9 @@ class LockService : Service(), BluetoothProfile.ServiceListener {
                     this, false, getString(R.string.no_dump_text), getString(R.string.unverified), took, plan.hz, q,
                 )
             }
+        } catch (e: PlaybackStarted) {
+            // As when it played at the tap: no change was made, so a notice, not a failure.
+            Last.notice(this, getString(R.string.pause_first))
         } catch (e: SecurityException) {
             Log.w(TAG, "Lock", e)
             Last.save(this, false, getString(R.string.not_paired), getString(R.string.failed), 0, hz, q)

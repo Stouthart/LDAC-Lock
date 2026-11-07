@@ -4,22 +4,36 @@ import android.content.ComponentName
 import android.content.Context
 import android.os.Build
 import android.os.SystemClock
+import android.provider.Settings
 import android.service.quicksettings.TileService
 import java.util.concurrent.CopyOnWriteArraySet
 
-/** How this phone encodes LDAC, detected once per firmware build (an OTA can change it). */
+/**
+ * Whether a detection saved on firmware [savedBuild] in boot [savedBoot] still holds on [build] in boot [boot]: never
+ * across a system update, which can change the encoder. With [sameBoot], as a lock asks, not across a restart either:
+ * hardware offload may have been switched in Developer options, and a hardware path taken for software would skip the
+ * check that nothing plays. No boot count (-1): a lock detects every time.
+ */
+fun detectionHolds(savedBuild: String?, build: String, savedBoot: Int, boot: Int, sameBoot: Boolean) =
+    savedBuild == build && (!sameBoot || boot >= 0 && savedBoot == boot)
+
+/** How this phone encodes LDAC, as last detected: per firmware build, and for a lock per boot too (detectionHolds). */
 object Phone {
     private fun prefs(c: Context) = c.getSharedPreferences("phone", Context.MODE_PRIVATE)
 
-    fun path(c: Context): Path? {
+    private fun boot(c: Context) = Settings.Global.getInt(c.contentResolver, Settings.Global.BOOT_COUNT, -1)
+
+    /** The saved path; with [sameBoot], as a lock needs it, only one detected since the phone started. */
+    fun path(c: Context, sameBoot: Boolean = false): Path? {
         val p = prefs(c)
-        if (p.getString("build", null) != Build.FINGERPRINT) return null
+        if (!detectionHolds(p.getString("build", null), Build.FINGERPRINT, p.getInt("boot", -1), boot(c), sameBoot)) return null
         return Path(p.getBoolean("hardware", false), p.getInt("hz", 44100))
     }
 
     fun save(c: Context, path: Path) {
         prefs(c).edit()
             .putString("build", Build.FINGERPRINT)
+            .putInt("boot", boot(c))
             .putBoolean("hardware", path.hardware)
             .putInt("hz", path.hz)
             .apply()

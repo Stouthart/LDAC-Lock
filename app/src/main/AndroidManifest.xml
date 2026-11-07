@@ -23,6 +23,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.LdacLock">
 
+        <!-- No fixed orientation here: upright on a phone only, decided in code (uprightOnPhone). -->
         <activity
             android:name=".MainActivity"
             android:exported="true">
