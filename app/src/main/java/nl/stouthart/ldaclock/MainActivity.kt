@@ -43,6 +43,7 @@ import android.widget.SeekBar
 import android.widget.TextView
 import java.util.Date
 
+private const val LOW_BATTERY = 15 // % and below in orange, as Android warns about its own battery.
 private const val MEDIA_QUIET_MS = 300L // Playback notices come several to a change: one read, this long after the last.
 
 private var View.shown: Boolean
@@ -73,6 +74,7 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
     private lateinit var hiRes: View
     private lateinit var play: ImageView
     private lateinit var spec: TextView
+    private lateinit var note: TextView
     private lateinit var state: TextView
     private lateinit var pair: TextView
     private lateinit var summary: TextView
@@ -90,7 +92,8 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
     private var config: BluetoothCodecConfig? = null // The reported config the next encoder read is shown with.
     private var readFor: String? = null // The headphones it's for, whose read is kept for while music plays.
 
-    // Live while visible: Bluetooth on/off, headphones (dis)connecting, the active headset changing, the codec changing.
+    // Live while visible: Bluetooth on/off, headphones (dis)connecting, the active headset changing, the codec changing;
+    // a battery change only redraws the device line, with no look at the codec.
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
             when (i.action) {
@@ -98,6 +101,9 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
                 ACTION_CODEC_CONFIG_CHANGED -> {
                     main.removeCallbacks(look)
                     main.postDelayed(look, CODEC_QUIET_MS)
+                }
+                ACTION_BATTERY_LEVEL_CHANGED -> if (meta.shown && checkSelfPermission(BLUETOOTH_CONNECT) == PERMISSION_GRANTED) {
+                    a2dp?.let { activeHeadphones(it) }?.let { line(it) }
                 }
                 else -> show()
             }
@@ -129,6 +135,7 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
 
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)
+        uprightOnPhone()
         setContentView(R.layout.activity_main)
         name = findViewById(R.id.name)
         meta = findViewById(R.id.meta)
@@ -145,6 +152,7 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
             playButton(!p) // At once; the playback notice that follows confirms it.
         }
         spec = findViewById(R.id.spec)
+        note = findViewById(R.id.note)
         state = findViewById(R.id.state)
         pair = findViewById(R.id.pair)
         summary = findViewById(R.id.summary)
@@ -182,7 +190,10 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
         fold()
     }
 
-    /** The App settings card opens and closes with a tap on its title: closed at first, then as it was left. */
+    /**
+     * The App settings card opens and closes with a tap on its title row, the whole card while closed: closed at first,
+     * then as it was left.
+     */
     private fun fold() {
         val prefs = getSharedPreferences("settings", MODE_PRIVATE)
         val header: View = findViewById(R.id.settings_header)
@@ -266,6 +277,7 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
             addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
             addAction(ACTION_ACTIVE_DEVICE_CHANGED)
             addAction(ACTION_CODEC_CONFIG_CHANGED)
+            addAction(ACTION_BATTERY_LEVEL_CHANGED)
         }
         // Only a sender holding BLUETOOTH_PRIVILEGED (the Bluetooth stack) can trigger a refresh.
         registerReceiver(receiver, filter, BLUETOOTH_PRIVILEGED, null, RECEIVER_EXPORTED)
@@ -349,8 +361,11 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
         }
         val s = if (p?.hardware == true) R.string.lock_summary_direct else R.string.lock_summary_hop
         summary.text = getString(s, khz(hz), Quality.name(q))
+        // A notice, as Pause playback first, is a lock refused, and a failed lock a problem too: in the warning colour.
+        // A lock that worked, in grey: the state line above already says Locked, in green.
         Last.notice?.let {
             last.text = it
+            last.setTextColor(getColor(R.color.warning))
             last.shown = true
             return
         }
@@ -359,6 +374,7 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
         if (at == 0L) return
         val time = clock(at)
         val took = Last.took(this)
+        last.setTextColor(getColor(if (Last.ok(this)) R.color.text2 else R.color.warning))
         last.text = if (Last.ok(this)) {
             getString(R.string.last_lock, time, if (took < 1000) "$took ms" else "%.1f s".format(took / 1000.0))
         } else {
@@ -367,6 +383,37 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
     }
 
     /** Bluetooth off, no headphones, or no permission: only the message in the device card. */
+    /** The device line: the headphones' kind in blue, then their battery as they report it, in orange when low. */
+    private fun line(d: BluetoothDevice) {
+        val kind = getString(d.kind())
+        val level = d.battery()
+        val battery = level?.let { getString(R.string.battery, it) }
+        meta.text = SpannableString(listOfNotNull(kind, battery).joinToString(" · ")).apply {
+            setSpan(ForegroundColorSpan(getColor(R.color.accent_text)), 0, kind.length, 0)
+            if (battery != null && level <= LOW_BATTERY) {
+                val at = kind.length + 3
+                setSpan(ForegroundColorSpan(getColor(R.color.warning)), at, at + battery.length, 0)
+            }
+        }
+        meta.shown = true
+    }
+
+    /**
+     * Under the format, on RedMagic alone, whose mixer was measured at 48 kHz (the path keeps no other measured rate):
+     * music at 44.1 kHz is resampled once, to that, in grey, as nothing changes it; LDAC at another rate adds a resample,
+     * in orange, as Sample rate avoids it. Not counted: the music's own rate isn't known. In software (Samsung) the mixer
+     * follows the codec: none.
+     */
+    private fun note(c: BluetoothCodecConfig) {
+        val p = Phone.path(this)
+        note.shown = c.isLdac && c.hz > 0 && p?.hardware == true && p.hz == 48000
+        if (!note.shown) return
+        val once = c.hz == 48000
+        note.text = if (once) getString(R.string.resampled_once, khz(44100), khz(48000))
+        else getString(R.string.resampled_ldac, khz(48000), khz(c.hz))
+        note.setTextColor(getColor(if (once) R.color.text2 else R.color.warning))
+    }
+
     private fun empty(message: Int) {
         gen++ // A read still out would show a codec under this message.
         config = null // Nor may a second read queued behind it.
@@ -390,13 +437,9 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
         if (checkSelfPermission(BLUETOOTH_CONNECT) != PERMISSION_GRANTED) return empty(R.string.no_bluetooth)
         val d = activeHeadphones(a) ?: return empty(R.string.no_device)
 
-        val kind = getString(d.kind())
         name.text = d.name ?: d.address
         name.setTextColor(getColor(R.color.text))
-        meta.text = SpannableString("$kind · ${d.address}").apply {
-            setSpan(ForegroundColorSpan(getColor(R.color.accent_text)), 0, kind.length, 0)
-        }
-        meta.shown = true
+        line(d)
 
         val paired = isPaired(d)
         pair.shown = !paired
@@ -410,6 +453,7 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
         codec.text = c.codecLabel
         hiRes.shown = c.isLdac
         if (!again || !c.isLdac) spec.text = specText(c.hz, c.bits, c.mode) // On LDAC, encoder() sets it.
+        note(c)
         if (!c.isLdac) return state(R.drawable.ic_warning, R.color.warning, getString(R.string.not_locked)) // Codec is in the panel.
 
         // The DSP's encoder isn't in the dump, so a hardware path goes straight to the reported config.
@@ -464,8 +508,10 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
         }
         sessionReading = true
         Thread {
-            // Playing needs no dump, which would make the audio skip; only a waiting app is looked up.
-            val p = if (audio.isMusicActive) true else if (dumpable()) mediaPlaying() else null
+            // With DUMP, always the state the music app reports to Android: the output can keep counting as playing for
+            // a long while after a pause, as on the Astra. The media session's dump is small and quick, and safe while
+            // music plays: it's Bluetooth's encoder dump that makes the audio skip. Without DUMP, the output alone.
+            val p = mediaPlaying() ?: audio.isMusicActive.takeIf { it }
             runOnUiThread {
                 sessionReading = false
                 if (sessionAgain) {

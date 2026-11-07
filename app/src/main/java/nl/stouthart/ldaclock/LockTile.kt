@@ -37,7 +37,13 @@ class LockTile : TileService(), BluetoothProfile.ServiceListener {
     // MID, checked once their notices stopped.
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
-            if (i.action == BluetoothAdapter.ACTION_STATE_CHANGED) return update()
+            // Bluetooth on or off: as it shows now, and once it's on, whether the lock still holds. While it was off,
+            // check() ignored the headphones disconnecting, so the saved lock could show again for no headphones.
+            if (i.action == BluetoothAdapter.ACTION_STATE_CHANGED) {
+                update()
+                check()
+                return
+            }
             main.removeCallbacks(look)
             main.postDelayed(look, CODEC_QUIET_MS)
         }

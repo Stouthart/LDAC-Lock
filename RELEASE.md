@@ -1,8 +1,20 @@
-<!-- 1.4 - Copyright (C) 2026 Stouthart. All rights reserved. -->
+<!-- 1.5 - Copyright (C) 2026 Stouthart. All rights reserved. -->
 
 # Release notes
 
 Highlights per version, newest first.
+
+## 1.5 - November 2026
+
+- **Problems in orange:** under **Lock now**, **Pause playback first** and a failed lock's line, such as **Last lock failed 22:23 · …**, show in orange, as the app's other problems do; a lock that worked stays grey.
+- **Battery in view:** the headphones' battery, when they report it, next to their kind, such as **Headset · 80%**, in orange from 15% down. The Bluetooth address, which told nobody anything, is gone from that line.
+- **What RedMagic resamples:** under the format, a line tells what its mixer, fixed at 48 kHz, resamples: music at 44.1 kHz once, and LDAC at another rate than the mixer's adds a resample, in orange, as Sample rate avoids it. Shown only where the mixer was measured at 48 kHz.
+- **Version in App settings:** the version and copyright line is the last line of App settings, rather than at the foot of the screen.
+- **Upright on a phone:** the screen no longer turns on a phone; on a tablet, from 600dp wide, it turns as before.
+- **A bigger target:** App settings opens with a tap anywhere on its card, and closes with a tap on its title.
+- **Touch feedback that fits:** Quality's and Appearance's choices light up within their rounded corners, as the buttons do.
+- **More room between settings:** Quality sits a little further below the Sample rate slider, as far as settings stand apart elsewhere.
+- **Sturdier:** a lock detects the encoder again after each restart, so a hardware path, after switching hardware offload in Developer options, can't be taken for software and skip the pause check. A lock's detour via AAC or SBC asks a rate the headphones offer for it, where a pair with AAC at 48 kHz only would wait 5 seconds and end on AAC. On RedMagic, and on a phone whose encoder LDAC Lock can't tell without `DUMP`, a lock asks again whether music plays right before its first change, as music that started a moment after the tap would silence a hardware encoder; it then says **Pause playback first**, as at the tap, and changes nothing. The tile no longer shows a lock as holding after Bluetooth was off: once it's on again, it checks whether the lock still holds. The Play/Pause button in **Current codec** no longer jumps back to Pause after a pause, as on the Astra, where the sound output keeps counting as playing for a while: with `DUMP` it goes by the state the music app reports to Android, also a while after the pause and back in the app.
 
 ## 1.4 - November 2026
 
@@ -43,4 +55,4 @@ The first release: LDAC at its highest quality with one tap, on Samsung and RedM
 - **Detects the phone's encoder**, software or hardware, and the mixer's rate, once per firmware build. This needs the `DUMP` permission, granted over adb; without it, LDAC Lock changes nothing during playback.
 - **A screen** with the headphones, the current codec and whether it is locked, that follows the headphones and Bluetooth as they change. Light or dark as the phone is, or as set under **Appearance**.
 - **A tile** that shows the result: as its second line on Samsung, and as its name on RedMagic, whose round tiles hide that line. Greyed out while Bluetooth is off.
-- **Small and quiet:** 73 KB, no libraries, no internet permission, nothing running in the background, and a start in about 140 ms.
+- **Small and quiet:** 71 KB, no libraries, no internet permission, nothing running in the background, and a start in about 140 ms.

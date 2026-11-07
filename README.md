@@ -1,12 +1,12 @@
-<!-- 1.4 - Copyright (C) 2026 Stouthart. All rights reserved. -->
+<!-- 1.5 - Copyright (C) 2026 Stouthart. All rights reserved. -->
 
 # Lock Bluetooth LDAC at its highest quality
 
-A small Android app that sets your headphones' **LDAC** connection to its highest quality with one tap, from a Quick Settings tile or the app itself. Android starts every LDAC connection at adaptive quality, which lowers the bitrate whenever the connection gets busy, and on Samsung phones a plain change of the quality setting doesn't even reach the encoder. LDAC Lock makes the change stick, then checks what the encoder actually runs. Where the connection can't hold the top quality, it locks a lower fixed one instead. No internet access, no ads, no account, no background service, and nothing beyond Android itself: the app is 91 KB.
+A small Android app that sets your headphones' **LDAC** connection to its highest quality with one tap, from a Quick Settings tile or the app itself. Android starts every LDAC connection at adaptive quality, which lowers the bitrate whenever the connection gets busy, and on Samsung phones a plain change of the quality setting doesn't even reach the encoder. LDAC Lock makes the change stick, then checks what the encoder actually runs. Where the connection can't hold the top quality, it locks a lower fixed one instead. No internet access, no ads, no account, no background service, and nothing beyond Android itself: the app is 94 KB.
 
-<p align="center"><img src="docs/screenshot-s25.png" width="360" alt="LDAC Lock on a Galaxy S25 Edge, locked at LDAC 44.1 kHz, 24-bit, 909 kbps"></p>
+<p align="center"><img src="docs/screenshot-s25.png" width="360" alt="LDAC Lock on a Galaxy S25 Edge, locked at LDAC 44.1 kHz, 24-bit, 909 kbps, the headphones at 100%, with music playing"></p>
 
-This is **version 1.4**. The [release notes](RELEASE.md) list what each version changed.
+This is **version 1.5**. The [release notes](RELEASE.md) list what each version changed.
 
 ## What it sets
 
@@ -32,10 +32,10 @@ Developed and tested on a **Samsung Galaxy S25 Edge** (One UI 9, Android 17) and
 
 ## Installation
 
-Download `LDAC-Lock-1.4.apk` from the [latest release] and open it on the phone; Android asks to allow installing apps from that source first. Or install it from a computer with the phone connected over USB or wireless debugging:
+Download `LDAC-Lock-1.5.apk` from the [latest release] and open it on the phone; Android asks to allow installing apps from that source first. Or install it from a computer with the phone connected over USB or wireless debugging:
 
 ```bash
-adb install LDAC-Lock-1.4.apk
+adb install LDAC-Lock-1.5.apk
 ```
 
 Then grant the one permission an app can't ask for itself:
@@ -89,7 +89,7 @@ The screen shows the headphones, the current codec and whether it is locked, and
 
 \* On Samsung only without the `DUMP` permission.
 
-RedMagic's round tiles don't show a second line, so there the tile's name carries the status. When you open Quick Settings, a tile that claims a lock checks the codec again, and turns normal after a reconnect; while the panel stays open, it also notices the headphones disconnecting, another pair taking over, and the codec changing by itself, such as HIGH falling back to MID; a change during a check gets one more. A check only clears the lock it was about: a lock finished meanwhile stays. On Samsung with `DUMP` it also reads the encoder, so it turns normal too when the encoder fell back to adaptive while the report still says HIGH.
+RedMagic's round tiles don't show a second line, so there the tile's name carries the status. When you open Quick Settings, a tile that claims a lock checks the codec again, and turns normal after a reconnect; while the panel stays open, it also notices the headphones disconnecting, another pair taking over, Bluetooth coming back on, and the codec changing by itself, such as HIGH falling back to MID; a change during a check gets one more. A check only clears the lock it was about: a lock finished meanwhile stays. On Samsung with `DUMP` it also reads the encoder, so it turns normal too when the encoder fell back to adaptive while the report still says HIGH.
 
 ### The screen
 
@@ -104,11 +104,15 @@ RedMagic's round tiles don't show a second line, so there the tile's name carrie
 | `Not verified · checked when playback stops`   | While music plays, with no read for the codec Android reports now: it's read once playback stops                 |
 | `Not locked`                                   | Another codec, rate or bit depth                                                                                 |
 
+At the top, the headphones' name and kind, and their battery when they report it to the phone, such as **Headset · 80%**, in orange from 15% down.
+
+On RedMagic, a line under the format in **Current codec** tells what its mixer, fixed at 48 kHz, resamples: `Music at 44.1 kHz is resampled once, to the mixer's 48 kHz.`, or with another Sample rate, in orange, as setting 48 kHz avoids it, `The mixer runs at 48 kHz: LDAC at 44.1 kHz adds a resample.` On Samsung the mixer follows the codec, so there's no such line.
+
 In the **Current codec** panel, a round **Play/Pause** button shows while a music app plays or waits, such as Spotify paused. It sends the key a headset's button sends, so it pauses before a lock where one needs that, and plays on after. With `DUMP` it follows the app that gets the keys; without, it shows **Pause** only while something plays, as **Play** might start an app nobody meant.
 
-Above **Lock now**, **Sample rate** and **Quality** set what the next lock aims at; Quality's two choices show their bitrate at the chosen rate, such as `909 kbps` and `606 kbps`. Changing either never locks by itself. Below, the last lock shows its time and how long it took, or why it failed.
+Above **Lock now**, **Sample rate** and **Quality** set what the next lock aims at; Quality's two choices show their bitrate at the chosen rate, such as `909 kbps` and `606 kbps`. Changing either never locks by itself. Below, the last lock shows its time and how long it took, or in orange why it failed, or that playback needs pausing first.
 
-**App settings** opens and closes with a tap on its title; it starts closed and then stays as you left it. When it opens, all of it scrolls into view. In it, **Appearance** sets the app's look: **System default** follows the phone, **Light mode** and **Dark mode** set it for LDAC Lock alone.
+**App settings** opens with a tap anywhere on it and closes with a tap on its title; it starts closed and then stays as you left it. When it opens, all of it scrolls into view. In it, **Appearance** sets the app's look: **System default** follows the phone, **Light mode** and **Dark mode** set it for LDAC Lock alone. Its last line is the app's version and copyright.
 
 ## Permissions
 
@@ -125,11 +129,12 @@ No internet permission: nothing can leave the phone.
 ## Notes
 
 - The codec calls are hidden Android APIs, reached by reflection: `getCodecStatus`, `setCodecConfigPreference` and `getActiveDevice`. They may change with an Android update; on a phone without them, the lock says so instead of the app failing to start.
-- LDAC Lock detects the phone's encoder once per firmware build, and again after a system update. It keeps only a certain answer: a dump that timed out or came back incomplete is read again at the next lock. Each dump read gives up after 2 seconds.
+- LDAC Lock detects the phone's encoder once per firmware build, and a lock detects it again after each restart, so switching hardware offload in Developer options is picked up; the screen and the tile keep showing the last one meanwhile. It keeps only a certain answer: a dump that timed out or came back incomplete is read again at the next lock. Each dump read gives up after 2 seconds.
 - An app that sets codecs automatically, such as a codec switcher with an auto-switch, can undo a lock. Turn that off.
 - While music plays, LDAC Lock doesn't read the encoder: on Samsung that read makes the audio skip. While the codec Android reports is the same, the screen shows the encoder as last read, with the time, and the tile goes by it. Otherwise the report alone tells: **Not locked** after a reconnect, else **Not verified · checked when playback stops**, and the tile stays as it is. Both read it again once playback stops. Right after a lock it's still read, as the lock restarts the stream anyway.
 - Nothing runs in the background: LDAC Lock only works when you tap, and listens to Bluetooth only while its screen or Quick Settings is open. It starts in about 140 ms.
-- Colours mean the same throughout: blue is what's chosen or on; green good news, such as a lock that holds and the **Hi-Res** badge; orange a problem, such as **Not locked**, Bluetooth off or no headphones connected.
+- The screen stays upright on a phone; on a tablet, from 600dp wide, it turns.
+- Colours mean the same throughout: blue is what's chosen or on; green good news, such as a lock that holds and the **Hi-Res** badge; orange a problem, such as **Not locked**, a failed lock, Bluetooth off or no headphones connected.
 - Build output goes to `build.nosync` folders, which iCloud Drive doesn't sync.
 
 ### Device quirks

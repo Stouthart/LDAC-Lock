@@ -22,13 +22,31 @@
         <item name="android:padding">20dp</item>
     </style>
 
+    <!-- A section title with the accent bar beside it. -->
+    <style name="Title">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">@color/text</item>
+        <item name="android:textSize">20sp</item>
+    </style>
+
+    <!-- A setting's name, in the Lock section and App settings. -->
+    <style name="Label">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">@color/text</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
     <!-- A choice in a row of equal shares (Appearance's three, Quality's two). -->
     <style name="Segment">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">48dp</item> <!-- One height for segments and buttons, in both apps. -->
         <item name="android:layout_weight">1</item>
         <item name="android:background">@drawable/segment</item>
-        <item name="android:foreground">?android:attr/selectableItemBackground</item>
+        <item name="android:foreground">@drawable/press</item>
         <item name="android:gravity">center</item>
         <item name="android:maxLines">1</item>
         <item name="android:paddingHorizontal">6dp</item>
