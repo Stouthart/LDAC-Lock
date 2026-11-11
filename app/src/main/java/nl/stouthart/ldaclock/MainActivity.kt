@@ -31,6 +31,7 @@ import android.media.AudioPlaybackConfiguration
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.text.SpannableString
 import android.text.format.DateFormat
 import android.text.style.ForegroundColorSpan
@@ -132,6 +133,8 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
     private var playing: Boolean? = null // What the play button shows: playing, waiting, or no app (no button).
     private var sessionReading = false // One read of the music app's state at a time; one more if asked meanwhile.
     private var sessionAgain = false
+    private var tapped = 0L // The uptime of the last Play/Pause tap here; for FRESH_MS on, see heeds().
+    private val settled = Runnable { if (started) session() } // The read that has the last word after a tap.
 
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)
@@ -149,7 +152,12 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
             val key = if (p) KeyEvent.KEYCODE_MEDIA_PAUSE else KeyEvent.KEYCODE_MEDIA_PLAY
             audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, key))
             audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, key))
-            playButton(!p) // At once; the playback notice that follows confirms it.
+            // At once; a read once the music app followed confirms it, also when no app took the key: nothing then sends
+            // a playback notice.
+            playButton(!p)
+            tapped = SystemClock.uptimeMillis()
+            main.removeCallbacks(settled)
+            main.postDelayed(settled, FRESH_MS)
         }
         spec = findViewById(R.id.spec)
         note = findViewById(R.id.note)
@@ -295,6 +303,9 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
         main.removeCallbacks(look)
         main.removeCallbacks(media)
         main.removeCallbacks(fresh)
+        main.removeCallbacks(settled)
+        main.removeCallbacks(refresh)
+        tapped = 0L // Back on screen, the first read shows what is.
         Last.listeners -= refresh
         Last.notice = null
         a2dp?.let { adapter.closeProfileProxy(A2DP, it) }
@@ -320,6 +331,9 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
     override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
         pending = false
         if (!started) return adapter.closeProfileProxy(A2DP, proxy) // Asked before onStop, answered after it.
+        // A second answer, to a request from before a quick stop and start: the one held stays, this one closes, in
+        // either order, so none is left open.
+        if (a2dp != null && a2dp !== proxy) return adapter.closeProfileProxy(A2DP, proxy)
         a2dp = proxy as BluetoothA2dp
         show()
     }
@@ -382,7 +396,6 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
         }
     }
 
-    /** Bluetooth off, no headphones, or no permission: only the message in the device card. */
     /** The device line: the headphones' kind in blue, then their battery as they report it, in orange when low. */
     private fun line(d: BluetoothDevice) {
         val kind = getString(d.kind())
@@ -414,6 +427,7 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
         note.setTextColor(getColor(if (once) R.color.text2 else R.color.warning))
     }
 
+    /** Bluetooth off, no headphones, or no permission: only the message in the device card. */
     private fun empty(message: Int) {
         gen++ // A read still out would show a codec under this message.
         config = null // Nor may a second read queued behind it.
@@ -433,7 +447,12 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
         gen++
         config = null // Set again below for an encoder read; until then no read shows a codec from before.
         showLast()
-        lock.setText(R.string.lock_now)
+        // A lock still running, from here or the tile, keeps its Locking… through a redraw, as the tile does; its result
+        // redraws the screen. One that never reported stops counting after a while: the screen then redraws itself.
+        val locking = Last.isLocking
+        lock.setText(if (locking) R.string.locking else R.string.lock_now)
+        main.removeCallbacks(refresh)
+        if (locking) main.postDelayed(refresh, Last.lockLeft)
         if (checkSelfPermission(BLUETOOTH_CONNECT) != PERMISSION_GRANTED) return empty(R.string.no_bluetooth)
         val d = activeHeadphones(a) ?: return empty(R.string.no_device)
 
@@ -444,7 +463,7 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
         val paired = isPaired(d)
         pair.shown = !paired
         enable(pair, true)
-        enable(lock, paired)
+        enable(lock, paired && !locking)
         panel.shown = paired
         if (!again) state.shown = false
         if (!paired) return
@@ -507,6 +526,7 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
             return
         }
         sessionReading = true
+        val at = SystemClock.uptimeMillis()
         Thread {
             // With DUMP, always the state the music app reports to Android: the output can keep counting as playing for
             // a long while after a pause, as on the Astra. The media session's dump is small and quick, and safe while
@@ -517,12 +537,19 @@ class MainActivity : Activity(), BluetoothProfile.ServiceListener {
                 if (sessionAgain) {
                     sessionAgain = false
                     if (started) session()
-                } else if (started) {
+                } else if (started && heeds(at, p)) {
                     playButton(p)
                 }
             }
         }.start()
     }
+
+    /**
+     * Whether a read begun at [at] that found [p] may show, after a Play/Pause tap here: not one begun before the tap,
+     * nor one that still disagrees with it while the music app follows and the music goes quiet (without DUMP, the
+     * output can count as playing for a while after a pause). Either would flip the button back. From FRESH_MS on, all.
+     */
+    private fun heeds(at: Long, p: Boolean?) = at >= tapped + FRESH_MS || at > tapped && p == playing
 
     private fun playButton(p: Boolean?) {
         playing = p

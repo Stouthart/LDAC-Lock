@@ -102,6 +102,9 @@ object Last {
 
     val isLocking get() = lockAt != 0L && SystemClock.elapsedRealtime() - lockAt < LOCK_MS
 
+    /** ms until a lock that never reported stops counting as running; 0 while none runs. */
+    val lockLeft get() = if (isLocking) LOCK_MS - (SystemClock.elapsedRealtime() - lockAt) else 0L
+
     private fun prefs(c: Context) = c.getSharedPreferences("last", Context.MODE_PRIVATE)
 
     /** The last attempt locked: its history, which a reconnect afterwards doesn't change. */

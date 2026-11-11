@@ -178,14 +178,14 @@ fun pickRate(want: Int, offered: (Int) -> Boolean): Int {
     return order.firstOrNull(offered) ?: want
 }
 
+/** The detour's rate: the lowest its codec offers on these headphones, 44.1 kHz where offered; 0 for none. */
+fun detourRate(mask: Int) = Integer.lowestOneBit(mask)
+
 /**
  * Builds the steps to LDAC at [want] Hz and quality [q] from the phone's path and what the headphones can select.
  * Software or unknown: AAC → 32-bit → 24-bit. Hardware: one LDAC change. Null for headphones that don't offer LDAC,
  * or whose codecs can't be read: a detour via AAC or SBC would then leave them there, worse off than before.
  */
-/** The detour's rate: the lowest its codec offers on these headphones, 44.1 kHz where offered; 0 for none. */
-fun detourRate(mask: Int) = Integer.lowestOneBit(mask)
-
 fun plan(s: BluetoothCodecStatus?, path: Path?, want: Int, q: Long): Plan? {
     val caps = s?.codecsSelectableCapabilities.orEmpty()
     val ldac = caps.firstOrNull { it.isLdac } ?: return null

@@ -1,5 +1,7 @@
+<!-- The Hi-Res badge: a capsule, as the segments and buttons are. Android rounds a corner to half the height at most,
+     so its ends stay round at any text size. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <solid android:color="@color/accent" />
-    <corners android:radius="8dp" />
+    <corners android:radius="24dp" />
 </shape>

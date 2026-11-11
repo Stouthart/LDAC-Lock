@@ -192,12 +192,7 @@ class LockTile : TileService(), BluetoothProfile.ServiceListener {
             Last.locked()
             return openApp()
         }
-        qsTile?.apply {
-            state = Tile.STATE_ACTIVE
-            subtitle = getString(R.string.locking)
-            name(R.string.locking)
-            updateTile()
-        }
+        update() // Locking…
     }
 
     private fun Tile.name(res: Int) {
@@ -216,6 +211,11 @@ class LockTile : TileService(), BluetoothProfile.ServiceListener {
             t.state = Tile.STATE_UNAVAILABLE
             t.subtitle = getString(R.string.bluetooth_off)
             t.name(R.string.bluetooth_off)
+        } else if (Last.isLocking) {
+            // A lock running, from here or the app: Locking… until its result is in, also when the panel opens again.
+            t.state = Tile.STATE_ACTIVE
+            t.subtitle = getString(R.string.locking)
+            t.name(R.string.locking)
         } else {
             val ok = Last.current(this)
             t.state = if (ok) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE

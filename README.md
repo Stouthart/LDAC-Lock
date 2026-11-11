@@ -1,12 +1,12 @@
-<!-- 1.5 - Copyright (C) 2026 Stouthart. All rights reserved. -->
+<!-- 2.0 - Copyright (C) 2026 Stouthart. All rights reserved. -->
 
 # Lock Bluetooth LDAC at its highest quality
 
-A small Android app that sets your headphones' **LDAC** connection to its highest quality with one tap, from a Quick Settings tile or the app itself. Android starts every LDAC connection at adaptive quality, which lowers the bitrate whenever the connection gets busy, and on Samsung phones a plain change of the quality setting doesn't even reach the encoder. LDAC Lock makes the change stick, then checks what the encoder actually runs. Where the connection can't hold the top quality, it locks a lower fixed one instead. No internet access, no ads, no account, no background service, and nothing beyond Android itself: the app is 94 KB.
+A small Android app that sets your headphones' **LDAC** connection to its highest quality with one tap, from a Quick Settings tile or the app itself. Android starts every LDAC connection at adaptive quality, which lowers the bitrate whenever the connection gets busy, and on Samsung phones a plain change of the quality setting doesn't even reach the encoder. LDAC Lock makes the change stick, then checks what the encoder actually runs. Where the connection can't hold the top quality, it locks a lower fixed one instead. No internet access, no ads, no account, no background service, and nothing beyond Android itself: the app is 95 KB.
 
-<p align="center"><img src="docs/screenshot-s25.png" width="360" alt="LDAC Lock on a Galaxy S25 Edge, locked at LDAC 44.1 kHz, 24-bit, 909 kbps, the headphones at 100%, with music playing"></p>
+<p align="center"><img src="docs/screenshot-s25.png" width="360" alt="LDAC Lock on a Galaxy S25 Edge, locked at LDAC 44.1 kHz, 24-bit, 909 kbps, the headphones at 90%, with music playing"></p>
 
-This is **version 1.5**. The [release notes](RELEASE.md) list what each version changed.
+This is **version 2.0**. The [release notes](RELEASE.md) list what each version changed.
 
 ## What it sets
 
@@ -32,10 +32,10 @@ Developed and tested on a **Samsung Galaxy S25 Edge** (One UI 9, Android 17) and
 
 ## Installation
 
-Download `LDAC-Lock-1.5.apk` from the [latest release] and open it on the phone; Android asks to allow installing apps from that source first. Or install it from a computer with the phone connected over USB or wireless debugging:
+Download `LDAC-Lock-2.0.apk` from the [latest release] and open it on the phone; Android asks to allow installing apps from that source first. Or install it from a computer with the phone connected over USB or wireless debugging:
 
 ```bash
-adb install LDAC-Lock-1.5.apk
+adb install LDAC-Lock-2.0.apk
 ```
 
 Then grant the one permission an app can't ask for itself:
@@ -108,9 +108,9 @@ At the top, the headphones' name and kind, and their battery when they report it
 
 On RedMagic, a line under the format in **Current codec** tells what its mixer, fixed at 48 kHz, resamples: `Music at 44.1 kHz is resampled once, to the mixer's 48 kHz.`, or with another Sample rate, in orange, as setting 48 kHz avoids it, `The mixer runs at 48 kHz: LDAC at 44.1 kHz adds a resample.` On Samsung the mixer follows the codec, so there's no such line.
 
-In the **Current codec** panel, a round **Play/Pause** button shows while a music app plays or waits, such as Spotify paused. It sends the key a headset's button sends, so it pauses before a lock where one needs that, and plays on after. With `DUMP` it follows the app that gets the keys; without, it shows **Pause** only while something plays, as **Play** might start an app nobody meant.
+In the **Current codec** panel, a round **Play/Pause** button shows while a music app plays or waits, such as Spotify paused. It sends the key a headset's button sends, so it pauses before a lock where one needs that, and plays on after. It changes at a tap, and checks again once the music app had a moment to follow. With `DUMP` it follows the app that gets the keys; without, it shows **Pause** only while something plays, as **Play** might start an app nobody meant.
 
-Above **Lock now**, **Sample rate** and **Quality** set what the next lock aims at; Quality's two choices show their bitrate at the chosen rate, such as `909 kbps` and `606 kbps`. Changing either never locks by itself. Below, the last lock shows its time and how long it took, or in orange why it failed, or that playback needs pausing first.
+Above **Lock now**, **Sample rate** and **Quality** set what the next lock aims at; Quality's two choices show their bitrate at the chosen rate, such as `909 kbps` and `606 kbps`. Changing either never locks by itself. While a lock runs, from here or the tile, the button says **Locking…**. Below, the last lock shows its time and how long it took, or in orange why it failed, or that playback needs pausing first.
 
 **App settings** opens with a tap anywhere on it and closes with a tap on its title; it starts closed and then stays as you left it. When it opens, all of it scrolls into view. In it, **Appearance** sets the app's look: **System default** follows the phone, **Light mode** and **Dark mode** set it for LDAC Lock alone. Its last line is the app's version and copyright.
 

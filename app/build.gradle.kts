@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
 }
@@ -12,8 +14,23 @@ android {
         applicationId = "nl.stouthart.ldaclock"
         minSdk = 34 // Android 14; tested on 16 (RedMagic Astra) and 17 (S25 Edge).
         targetSdk = 37
-        versionCode = 11 // Keeps counting up: the phones carried internal builds up to 5.
-        versionName = "1.5"
+        versionCode = 12 // Keeps counting up: the phones carried internal builds up to 5.
+        versionName = "2.0"
+    }
+
+    // The release key: its keystore and passwords in keystore.properties beside the project, kept out of git. Without
+    // that file, as on another machine, the debug key signs, as before.
+    val keystore = rootProject.file("keystore.properties")
+    signingConfigs {
+        if (keystore.exists()) {
+            val k = Properties().apply { keystore.inputStream().use { load(it) } }
+            create("release") {
+                storeFile = file(k.getProperty("storeFile"))
+                storePassword = k.getProperty("storePassword")
+                keyAlias = k.getProperty("keyAlias")
+                keyPassword = k.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
@@ -21,7 +38,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
-            signingConfig = signingConfigs.getByName("debug") // Sideloaded only, so the debug key is enough.
+            signingConfig = signingConfigs.getByName(if (keystore.exists()) "release" else "debug")
         }
     }
 
